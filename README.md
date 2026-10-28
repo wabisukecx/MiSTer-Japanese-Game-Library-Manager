@@ -17,7 +17,7 @@ MiSTer Console Modeの日本語ゲーム名とパッケージ画像をPCで整�
 ## 使い始める前の準備
 
 1. **MiSTerにConsole Modeを導入する。** [Console Modeの公式配布ページ](https://github.com/Retro-Remake/ConsoleMode_Distribution)の案内に従ってインストールし、Console Modeが起動してゲームを選べることを確認します。
-2. **PCとMiSTerを同じネットワークへ接続する。** MiSTerのIPアドレスとFTPのユーザー名・パスワードを確認し、PCからFTPで接続できる状態にします。
+2. **PCとMiSTerを同じネットワークへ接続する。** MiSTerのIPアドレス（自分の実機の値。手順は[初回セットアップ](docs/setup.md#2-ftpで接続できることを確認する)）とFTPのユーザー名・パスワードを確認し、PCからFTPで接続できる状態にします。
 3. **PCにSkraperを用意する。** [Skraper公式サイト](https://www.skraper.net/)からWindows版をダウンロード・展開し、`SkraperUI.exe` を起動します。
 4. **ScreenScraperに登録し、Skraperでログインする。** [ScreenScraper](https://www.screenscraper.fr/)のユーザーアカウントを作成し、そのユーザー名とパスワードをSkraperに設定します。これはMiSTerのFTPアカウントとは別です。
 5. **PCのROMと画像取得設定を用意する。** 機種別のROMフォルダーを指定し、Skraperでパッケージ画像をPNGとして取得できることを確認します。
