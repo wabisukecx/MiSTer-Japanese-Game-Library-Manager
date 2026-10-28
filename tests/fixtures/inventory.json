@@ -1,0 +1,11 @@
+{
+  "device": "demo",
+  "root": "/media/fat/games/NES",
+  "roms": [
+    "/media/fat/games/NES/Sample Adventure (Japan).nes",
+    "/media/fat/games/NES/Sample Puzzle (USA).nes",
+    "/media/fat/games/NES/Sample Adventure (Japan) (Rev 1).zip"
+  ],
+  "existing_names": [],
+  "media_directories": []
+}

@@ -1,0 +1,4 @@
+[
+  {"system": "NES", "alias": "Sample Adventure", "japanese_title": "サンプル冒険", "source": "synthetic-test-data; fictional title"},
+  {"system": "NES", "alias": "Sample Puzzle", "japanese_title": "サンプルパズル", "source": "synthetic-test-data; fictional title"}
+]

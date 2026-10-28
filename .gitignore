@@ -1,0 +1,75 @@
+# Local library, caches, transfer backups, and private development archives
+/work/
+/roms/
+/images/
+/backups/
+/downloads/
+/tools/
+
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+/build/
+/dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+/htmlcov/
+coverage.xml
+
+# Local databases, including SQLite journal files
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Secrets and third-party scraper configuration
+.env
+.env.*
+!.env.example
+skraper.config.json
+Skraper.config.json
+
+# ROMs, downloaded archives, and external executables
+*.nes
+*.sfc
+*.smc
+*.bin
+*.gen
+# Mega Drive .md ROMs must stay under /roms/, /work/, or outside the repository.
+# Keep *.md available for Markdown documentation.
+*.gb
+*.gbc
+*.gba
+*.pce
+*.sgx
+*.zip
+*.7z
+*.rar
+*.exe
+
+# Local logs, temporary files, and old research outputs
+*.log
+*.tmp
+*.bak
+*~
+/docs/evidence/
+/docs/verification.txt
+/docs/cleanup-*.json
+
+# Editor and operating-system state
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
