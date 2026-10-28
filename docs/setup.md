@@ -39,6 +39,8 @@ PCとMiSTerを同じネットワークに接続し、MiSTerのIPアドレスとF
 .\.venv\Scripts\mister-jp-library.exe connection-test --host 192.0.2.10 --user root
 ```
 
+MiSTerの初期状態では、FTPのユーザー名は `root`、パスワードは `1` とされています。変更している場合は設定した値を使ってください。公式の仕様ではなく利用者の報告に基づく情報で、MiSTer本体の更新で初期値に戻ったという報告もあります。ログインできない場合は、使っているMiSTerの案内を確認します。
+
 IPとユーザー名は自分のMiSTerの値へ置き換えます。FTPパスワードは実行時に入力し、本ツールは保存しません。
 
 ## 3. PCにSkraperを用意する
