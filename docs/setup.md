@@ -42,7 +42,7 @@ PCとMiSTerを同じネットワークに接続し、MiSTerのIPアドレスとF
 MiSTerのFTPは標準で動作しており、[MiSTer公式ドキュメント（Advanced Networking）](https://mister-devel.github.io/MkDocs_MiSTer/advanced/network/)ではユーザー名 `root`、パスワード `1` とされています。パスワードを変更している場合は設定した値を使ってください。
 
 **`192.0.2.10` は例示用のIPです。そのまま入力せず、必ず自分のMiSTerのIPアドレスに置き換えてください。**
-IPは、MiSTerの起動メニューでF9キーを押してLinuxターミナルを開き、`root` でログインして `ip addr` を実行すると、`eth0` の `inet` 行で確認できます（[公式ドキュメント](https://mister-devel.github.io/MkDocs_MiSTer/advanced/network/)）。ルーターの接続機器一覧でも確認できます。
+IPはConsole Modeの「Home → Settings → Sound & Connectivity → Network」で確認できます。Console Modeを使えない場合は、MiSTerの起動メニューでF9キーを押してLinuxターミナルを開き、`root` でログインして `ip addr` を実行すると、`eth0` の `inet` 行で確認できます（[公式ドキュメント](https://mister-devel.github.io/MkDocs_MiSTer/advanced/network/)）。ルーターの接続機器一覧でも確認できます。
 ユーザー名も自分の値に置き換えます。FTPパスワードは実行時に入力し、本ツールは保存しません。
 
 ## 3. PCにSkraperを用意する
