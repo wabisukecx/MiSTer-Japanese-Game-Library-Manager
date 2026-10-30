@@ -10,9 +10,6 @@ import hashlib
 
 from systems import system_profile
 
-MAX_ROM_BYTES = 64 * 1024 * 1024
-
-
 def stream_sha256(stream):
     """Hash a stream on Python 3.10 as well as newer versions."""
     sha = hashlib.sha256()
@@ -23,7 +20,8 @@ def stream_sha256(stream):
 
 def rom_info(path, system, member=None):
     path = Path(path)
-    extensions = system_profile(system).transfer_extensions
+    profile = system_profile(system)
+    extensions = profile.transfer_extensions
     if path.suffix.lower() != '.zip':
         if member is not None or path.suffix.lower() not in extensions or not path.is_file():
             raise ValueError('機種に対応するROMファイルではありません: ' + path.name)
@@ -42,8 +40,9 @@ def rom_info(path, system, member=None):
             if len(candidates) != 1:
                 raise ValueError('ZIPには選択機種のROMを1本だけ入れてください: ' + path.name)
             entry = candidates[0]
-            if entry.flag_bits & 1 or entry.file_size > MAX_ROM_BYTES:
-                raise ValueError('暗号化ZIP・64 MiBを超えるROMは対象外です: ' + path.name)
+            if entry.flag_bits & 1 or entry.file_size > profile.max_zip_rom_bytes:
+                raise ValueError('暗号化ZIP・%d MiBを超えるROMは対象外です: %s' % (
+                    profile.max_zip_rom_bytes // (1024 * 1024), path.name))
             if member is not None and entry.filename != member:
                 raise ValueError('登録後にZIP内のROM名が変更されました: ' + path.name)
             return dict(name=path.name, size=path.stat().st_size, archive_member=entry.filename,

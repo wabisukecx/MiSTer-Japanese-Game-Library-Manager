@@ -14,6 +14,31 @@ HAS_QT = importlib.util.find_spec('PyQt6') is not None
 
 @unittest.skipUnless(HAS_QT, 'optional GUI dependency PyQt6 is not installed')
 class GUITests(unittest.TestCase):
+    def test_added_systems_are_selectable_in_filter_and_registration(self):
+        from gui.app import MainWindow
+        from PyQt6.QtWidgets import QComboBox, QDialog
+        from test_added_systems import ADDITIONS
+        with tempfile.TemporaryDirectory() as tmp:
+            window = MainWindow(Path(tmp) / 'db')
+            try:
+                self.wait_idle(window)
+                self.assertEqual(window.system.findData('NDS'), -1)
+                for system, _, _ in ADDITIONS:
+                    self.assertGreaterEqual(window.system.findData(system), 0)
+                def inspect(dialog):
+                    combo = dialog.findChild(QComboBox, 'registrationSystem')
+                    self.assertEqual(combo.findData('NDS'), -1)
+                    for system, _, _ in ADDITIONS:
+                        index = combo.findData(system)
+                        self.assertGreaterEqual(index, 0)
+                        combo.setCurrentIndex(index)
+                        self.assertEqual(combo.currentData(), system)
+                    return QDialog.DialogCode.Rejected
+                with patch('gui.app.QDialog.exec', new=inspect):
+                    window.choose_local_roms()
+            finally:
+                window.close()
+
     def test_refresh_cleans_missing_selection_and_zero_rotation_saves_new_candidate(self):
         from gui.app import MainWindow
         from database.store import Store

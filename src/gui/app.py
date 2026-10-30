@@ -561,12 +561,17 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(dialog)
         device = QLineEdit(self.device.currentData() or 'home-mister')
         system, root = QComboBox(), QComboBox()
+        system.setObjectName('registrationSystem')
+        system_note = label('')
+        system_note.setWordWrap(True)
         for profile in SYSTEMS.values():
             system.addItem(profile.name, profile.id)
         system.setCurrentIndex(max(0, system.findData(self.system.currentData())))
         def update_roots():
             root.clear()
-            root.addItems(system_profile(system.currentData()).roots)
+            profile = system_profile(system.currentData())
+            root.addItems(profile.roots)
+            system_note.setText(profile.usage_note)
         system.currentIndexChanged.connect(update_roots)
         update_roots()
         automatic = QCheckBox('登録後に日本語名をDBで照合する（インターネット接続が必要）')
@@ -574,6 +579,7 @@ class MainWindow(QMainWindow):
         for title, field in [('ライブラリ名', device), ('機種', system), ('MiSTerの転送先（機種ごとに固定）', root)]:
             layout.addWidget(label(title))
             layout.addWidget(field)
+        layout.addWidget(system_note)
         folder_edit = QLineEdit()
         folder_edit.setObjectName('romFolder')
         folder_edit.setPlaceholderText('PCのROMフォルダー（参照で選択、または貼り付け）')

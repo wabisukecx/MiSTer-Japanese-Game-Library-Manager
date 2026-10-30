@@ -13,7 +13,8 @@ import urllib.request
 from .matcher import normalize
 from local_rom import open_rom
 
-PLATFORMS = {'NES': 'fc', 'SNES': 'sfc', 'MD': 'md', 'GB': 'gb', 'GBC': 'gbc', 'GBA': 'gba', 'PCE': 'pce'}
+PLATFORMS = {'NES': 'fc', 'SNES': 'sfc', 'MD': 'md', 'GB': 'gb', 'GBC': 'gbc', 'GBA': 'gba', 'PCE': 'pce',
+             'PS1': 'ps1', 'N64': 'n64', 'NEOGEO': 'neogeo', 'WS': 'ws', 'WSC': 'wsc'}
 BASE = 'https://gamedb.retronian.com/api/v1'
 SOURCE = 'https://github.com/retronian/retronian-gamedb'
 LICENSE = 'CC BY-SA 4.0'
@@ -68,7 +69,7 @@ def load_catalog(system, cache_root, *, refresh=False, opener=urllib.request.url
     cache.parent.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_suffix('.tmp')
     tmp.write_text(json.dumps(dict(source=SOURCE, license=LICENSE, fetched_at=time.time(), games=rows),
-                              ensure_ascii=False), encoding='utf-8')
+                              ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     tmp.replace(cache)
     (cache.parent / 'NOTICE.txt').write_text(NOTICE, encoding='utf-8')
     return rows, 'download'
