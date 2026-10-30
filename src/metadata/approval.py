@@ -8,13 +8,16 @@ from artwork.skraper_import import inspect_png
 def approval_plan(games):
     plan = []
     for game in games:
-        names = list(dict.fromkeys(c['japanese_title'] for c in game['_titles']
-                                  if c.get('score') == 1 and c.get('japanese_title', '').strip()))
+        strong = [c for c in game['_titles'] if c.get('score') == 1 and c.get('japanese_title', '').strip()]
+        names = list(dict.fromkeys(c['japanese_title'] for c in strong))
         title = None
         if game['match_status'] == 'confirmed':
             title_note = '確定済みを保持'
         elif len(names) == 1:
-            title, title_note = names[0], '候補を確定'
+            title = names[0]
+            # Score 1 also covers a ROM-name match whose content was never compared; say which it was.
+            hashed = any('SHA-256' in c.get('reason', '') for c in strong)
+            title_note = '候補を確定（ROM内容一致）' if hashed else '候補を確定（ROM名一致・内容は未照合）'
         else:
             title_note = '候補なし、または複数候補のため個別確認'
         artwork = None

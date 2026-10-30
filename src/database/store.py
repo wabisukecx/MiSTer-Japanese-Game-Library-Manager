@@ -34,8 +34,6 @@ class Store:
             UNIQUE(game_id,url));
         CREATE TABLE IF NOT EXISTS sync_manifests (
             id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP, payload TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS sync_history (
-            id INTEGER PRIMARY KEY, created_at TEXT DEFAULT CURRENT_TIMESTAMP, status TEXT, detail TEXT);
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS local_roms (
             game_id INTEGER PRIMARY KEY REFERENCES games(id), local_rom_path TEXT NOT NULL);

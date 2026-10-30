@@ -29,9 +29,6 @@ def check_alias_collisions(ftp, mapping, allowed_paths=(), *, cancelled=lambda: 
             if facts.get('type') == 'dir':
                 pending.append(path)
             elif PurePosixPath(name).stem in mapping and path not in allowed:
-                # Unknown entry types (including links) are never treated as a safe target.
-                conflicts.append(path)
-            elif PurePosixPath(name).stem in mapping and facts.get('type') != 'file':
                 conflicts.append(path)
     if conflicts:
         raise ValueError('実機の別ROMと別名キーが重複します: ' + '、'.join(sorted(conflicts)))

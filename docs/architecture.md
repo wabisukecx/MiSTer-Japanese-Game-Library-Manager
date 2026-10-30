@@ -49,7 +49,6 @@ workflow.register_folderはGUIとCLIで共有します。workflow.batch_planは�
 | artworks / artwork_edits | 画像候補・ハッシュ、補正元・角度・元ハッシュ |
 | settings | GUIの表示範囲、機種別作業先、Skraperの場所 |
 | sync_manifests | CLIのレビュー用JSON履歴 |
-| sync_history | 現行の転送では未使用 |
 
 名前はunmatched・review・confirmedの状態を持ちます。候補更新は確定名を変更しません。
 画像は選択パスを保持し、同じ候補の内容が更新されたら選択を解除します。補正画像は祖先のハッシュも検査します。
