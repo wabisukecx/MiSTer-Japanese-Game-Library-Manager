@@ -741,7 +741,10 @@ class GUITests(unittest.TestCase):
                 finally:
                     db.close()
                 def accept(dialog):
-                    self.assertEqual(len(dialog.findChildren(QCheckBox)), 2)
+                    boxes = dialog.findChildren(QCheckBox)
+                    self.assertEqual(len(boxes), 3)
+                    # The weak-match option starts off, so title-name-only candidates are never silently included.
+                    self.assertFalse(next(b for b in boxes if '名前一致のみ' in b.text()).isChecked())
                     return QDialog.DialogCode.Accepted
                 with patch.object(QDialog, 'exec', accept):
                     window.approve_checked()

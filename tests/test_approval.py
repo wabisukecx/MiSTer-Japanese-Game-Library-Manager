@@ -39,6 +39,26 @@ class ApprovalTests(unittest.TestCase):
         self.assertEqual(self.db.game(self.game)['artwork_path'], str(self.image))
         self.assertEqual(self.db.game(self.game)['sync_status'], 'blocked')
 
+    def test_title_name_only_candidate_needs_explicit_opt_in(self):
+        self.db.save_candidates(self.game, [dict(japanese_title='日本語名', score=0.8, reason='title', match_kind='title_name')])
+        self.assertIsNone(approval_plan([self.snapshot()])[0]['title'])
+        self.assertIn('名前一致のみ', approval_plan([self.snapshot()])[0]['title_note'])
+        plan = approval_plan([self.snapshot()], include_weak=True)
+        self.assertTrue(plan[0]['weak'])
+        # An opt-in plan is still rechecked at apply time against the live candidates.
+        self.db.save_candidates(self.game, [dict(japanese_title='日本語名', score=0.8, reason='title'),
+                                            dict(japanese_title='別表記', score=0.8, reason='title')])
+        self.assertEqual(apply_approval(self.db, plan, images=False)['errors'], 1)
+        self.db.save_candidates(self.game, [dict(japanese_title='日本語名', score=0.8, reason='title', match_kind='title_name')])
+        self.assertEqual(apply_approval(self.db, plan, images=False)['titles'], 1)
+        self.assertEqual(self.db.game(self.game)['japanese_title'], '日本語名')
+        self.assertEqual(self.db.title_decisions(self.game)[-1]['action'], 'batch_confirmed_weak')
+
+    def test_conflicting_weak_candidates_stay_excluded_even_when_opted_in(self):
+        self.db.save_candidates(self.game, [dict(japanese_title='A', score=0.8, reason='t'),
+                                            dict(japanese_title='B', score=0.8, reason='t')])
+        self.assertIsNone(approval_plan([self.snapshot()], include_weak=True)[0]['title'])
+
     def test_confirmed_information_is_kept(self):
         self.db.confirm(self.game, '手動確定名')
         self.db.select_artwork(self.game, self.db.artworks(self.game)[0]['id'])

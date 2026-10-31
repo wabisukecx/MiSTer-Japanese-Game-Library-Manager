@@ -34,7 +34,11 @@ def group_candidates(candidates):
     return groups
 
 
-def batch_title(candidates):
-    """Conflicting spellings require individual review, even when one has a stronger match."""
+def batch_title(candidates, *, allow_weak=False):
+    """Conflicting spellings require individual review, even when one has a stronger match.
+
+    allow_weak also accepts a single spelling backed only by a title-name match (score below 1)."""
     groups = group_candidates(candidates)
-    return groups[0] if len(groups) == 1 and groups[0].get('score') == 1 else None
+    if len(groups) != 1:
+        return None
+    return groups[0] if allow_weak or groups[0].get('score') == 1 else None

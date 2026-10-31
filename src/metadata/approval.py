@@ -6,10 +6,11 @@ from artwork.skraper_import import inspect_png
 from .title_resolution import batch_title, evidence_rank
 
 
-def approval_plan(games):
+def approval_plan(games, *, include_weak=False):
     plan = []
     for game in games:
-        single = batch_title(game['_titles'])
+        single = batch_title(game['_titles'], allow_weak=include_weak)
+        weak = False
         title = None
         if game['match_status'] == 'confirmed':
             title_note = '確定済みを保持'
@@ -17,7 +18,11 @@ def approval_plan(games):
             title = single['japanese_title']
             # Score 1 also covers a ROM-name match whose content was never compared; say which it was.
             hashed = evidence_rank(single) == 3
-            title_note = '候補を確定（ROM内容一致）' if hashed else '候補を確定（ROM名一致・内容は未照合）'
+            weak = single.get('score') != 1
+            title_note = ('候補を確定（タイトル名一致のみ・地域と版は未照合）' if weak else
+                          '候補を確定（ROM内容一致）' if hashed else '候補を確定（ROM名一致・内容は未照合）')
+        elif batch_title(game['_titles'], allow_weak=True):
+            title_note = '名前一致のみの候補です。個別に確認するか、「名前一致のみの候補も含める」を選択'
         else:
             title_note = '候補なし、または複数候補のため個別確認'
         artwork = None
@@ -35,7 +40,7 @@ def approval_plan(games):
                 image_note = '補正済み画像を採用' if artwork.get('rotation_degrees') else '画像候補を採用'
             else:
                 image_note = '画像なし、または複数候補のため個別確認'
-        plan.append(dict(game_id=game['id'], rom_filename=game['rom_filename'], title=title,
+        plan.append(dict(game_id=game['id'], rom_filename=game['rom_filename'], title=title, weak=weak,
                          artwork=artwork, title_note=title_note, image_note=image_note,
                          expected=dict(match_status=game['match_status'], japanese_title=game['japanese_title'],
                                        artwork_path=game['artwork_path'])))
@@ -63,7 +68,7 @@ def apply_approval(db, plan, *, titles=True, images=True, cancelled=lambda: Fals
                     result['conflicts'] += 1
                     continue
                 if title is not None:
-                    live = batch_title(db.get_candidates(game['id']))
+                    live = batch_title(db.get_candidates(game['id']), allow_weak=item.get('weak', False))
                     if live is None or live['japanese_title'] != title or any(ord(c) < 32 for c in title):
                         raise ValueError('承諾するタイトル候補が変更されています')
                 if artwork is not None:
@@ -79,7 +84,8 @@ def apply_approval(db, plan, *, titles=True, images=True, cancelled=lambda: Fals
                 if title is not None:
                     db.db.execute("UPDATE games SET japanese_title=?,match_status='confirmed' WHERE id=?",
                                   (title, game['id']))
-                    db.record_title_decision(game['id'], 'batch_confirmed', game['japanese_title'], title)
+                    db.record_title_decision(game['id'], 'batch_confirmed_weak' if item.get('weak') else 'batch_confirmed',
+                                         game['japanese_title'], title)
                 if artwork is not None:
                     db.db.execute('UPDATE games SET artwork_source=?,artwork_region=?,artwork_path=? WHERE id=?',
                                   (row['source'], row['region'], row['local_path'], game['id']))
