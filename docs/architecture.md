@@ -12,7 +12,7 @@ src/
 ├── workflow.py           登録・照合・転送計画の共通処理
 ├── local_rom.py          ROMとZIPの読み取り
 ├── systems.py            機種定義と転送先検査
-├── gui/                  PyQt6の画面（app=本体、transfer_flow/import_flow/detail_panel=操作別、tasks=ワーカー、library_model=一覧）
+├── gui/                  PyQt6の画面とワーカー
 ├── database/             SQLiteストア
 ├── metadata/             名前照合、一括承諾、出典付き日本語名DBの出力・マージ
 ├── artwork/              画像取得・取り込み・回転補正
@@ -35,6 +35,17 @@ Skraper ─ PNG取り込み・コピー ─ 画像候補 ─ 補正・採用
 ```
 
 GUIの時間がかかる操作はQThreadで実行し、SQLite接続はワーカー内で作成・終了します。
+GUIの構成は次のとおりです。MainWindow（gui/app.py）は画面の組み立て、タスク制御、一覧の絞り込みを担い、操作ごとの処理はMixinへ分けています。
+
+| モジュール | 責務 |
+|---|---|
+| gui/app.py | MainWindow、起動処理 |
+| gui/transfer_flow.py | 転送の確認・実行と転送の復旧（TransferMixin） |
+| gui/import_flow.py | PCのROM登録、Skraperの画像取得・取り込み（ImportMixin） |
+| gui/detail_panel.py | 日本語名候補、画像表示、回転補正、保存（DetailMixin） |
+| gui/library_model.py | 一覧のモデルと絞り込み |
+| gui/tasks.py | QThreadのTaskと、短命なDB接続（with_db） |
+| gui/style.py | スタイルシートと共通ラベル |
 workflow.register_folderはGUIとCLIで共有します。workflow.batch_planは画面の古い状態ではなく、現在のDBから各計画を作成します。
 
 ## DBと状態
