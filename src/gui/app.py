@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QLineEdit, QCheckBox, QSplitter, QTableView, QHeaderView, QListWidget,
     QListWidgetItem, QFrame, QFileDialog, QMessageBox, QProgressBar, QDialog,
     QDialogButtonBox, QPlainTextEdit, QAbstractItemView,
-    QTabWidget, QSizePolicy, QMenu,
+    QScrollArea, QSizePolicy, QMenu, QToolButton,
 )
 
 from artwork.skraper_import import plan_import, apply_import, inspect_png
@@ -21,7 +21,8 @@ from database.store import Store
 from metadata.approval import approval_plan, apply_approval
 from metadata.titles import match_titles
 from metadata.title_resolution import group_candidates
-from workflow import register_folder, batch_plan
+from workflow import register_folder, batch_plan, review_transfer_plan, accept_transfer_review
+from .review_list import populate_review
 from mister.recovery import recover_transfer, validate_journal
 from mister.artwork_transfer import transfer_images
 from .transfer_dialog import TransferDialog
@@ -174,7 +175,7 @@ class LibraryModel(QAbstractTableModel):
             candidate = groups[0]['japanese_title'] if groups else ''
             title = game['japanese_title'] or (candidate + '（候補）' if candidate else '—')
             art = '選択済み' if game['artwork_path'] else ('候補 %d枚' % len(game['_artworks']) if game['_artworks'] else '未取得')
-            status = {'confirmed': '確定済み', 'review': '要確認', 'unmatched': '未照合'}.get(game['match_status'], game['match_status'])
+            status = {'confirmed': '確定済み', 'review': '候補あり', 'unmatched': 'ROM名で表示'}.get(game['match_status'], game['match_status'])
             return (game['rom_filename'], title, game['region'] or '不明', art, status)[index.column()]
 
 
@@ -263,14 +264,18 @@ class MainWindow(QMainWindow):
         workflow.addWidget(self.button('1 · PCのROMを登録', self.choose_local_roms))
         self.skraper_button = self.button('2 · Skraperで画像取得・取り込み', self.choose_skraper, True)
         workflow.addWidget(self.skraper_button)
-        workflow.addWidget(self.button('4 · MiSTerへまとめて転送', self.choose_transfer))
+        self.approve_button = self.button('3 · 名前・画像を確認', self.approve_checked, True)
+        self.approve_button.setEnabled(False)
+        workflow.addWidget(self.approve_button)
+        self.transfer_button = self.button('4 · MiSTerへまとめて転送', self.choose_transfer)
+        workflow.addWidget(self.transfer_button)
         page.addLayout(workflow)
 
         filters = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText('ROM名・日本語タイトルで検索')
         self.search.textChanged.connect(self.refilter)
-        self.pending_only = QCheckBox('未照合・要確認のみ')
+        self.pending_only = QCheckBox('日本語名が未確定のみ')
         self.pending_only.toggled.connect(self.refilter)
         filters.addWidget(self.search)
         self.system = QComboBox()
@@ -295,9 +300,6 @@ class MainWindow(QMainWindow):
         self.check_count = label('0本をチェック', 'muted')
         batch.addWidget(self.check_count)
         batch.addStretch()
-        self.approve_button = self.button('3 · チェックした候補をまとめて承諾', self.approve_checked, True)
-        self.approve_button.setEnabled(False)
-        batch.addWidget(self.approve_button)
         page.addLayout(batch)
 
         splitter = QSplitter()
@@ -322,40 +324,57 @@ class MainWindow(QMainWindow):
         self.table.selectionModel().currentRowChanged.connect(self.show_game)
         splitter.addWidget(self.table)
 
-        details = QTabWidget()
-        details.setMinimumWidth(360)
+        details = QScrollArea()
+        details.setMinimumWidth(380)
+        details.setWidgetResizable(True)
+        detail_panel = QWidget()
+        details.setWidget(detail_panel)
+        panel_layout = QVBoxLayout(detail_panel)
+        panel_layout.setContentsMargins(10, 10, 10, 10)
+        panel_layout.setSpacing(8)
         package_page = QWidget()
         title_page = QWidget()
-        details.addTab(package_page, 'パッケージ画像')
-        details.addTab(title_page, '日本語タイトル')
+        panel_layout.addWidget(title_page)
+        panel_layout.addWidget(package_page, 1)
+        metadata_toggle = QToolButton()
+        metadata_toggle.setText('候補の根拠・画像の出典')
+        metadata_toggle.setCheckable(True)
+        panel_layout.addWidget(metadata_toggle)
+        metadata = QWidget()
+        metadata_layout = QVBoxLayout(metadata)
+        metadata_layout.setContentsMargins(0, 0, 0, 0)
+        metadata_toggle.toggled.connect(metadata.setVisible)
+        metadata.setVisible(False)
+        panel_layout.addWidget(metadata)
         detail = QVBoxLayout(package_page)
-        detail.setContentsMargins(12, 12, 12, 12)
+        detail.setContentsMargins(0, 0, 0, 0)
+        detail.setSpacing(6)
         title_layout = QVBoxLayout(title_page)
-        title_layout.setContentsMargins(12, 16, 12, 16)
-        title_layout.setSpacing(12)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(6)
         detail.addWidget(label('パッケージの確認', 'section'))
         self.cover = label('ゲームを選択してください', 'cover')
         self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.cover.setMinimumSize(300, 245)
+        self.cover.setMinimumSize(280, 180)
         self.cover.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Ignored)
         detail.addWidget(self.cover, 1)
         rotations = QHBoxLayout()
         rotations.addWidget(self.button('左へ90°', lambda: self.rotate(-90)))
         rotations.addWidget(self.button('右へ90°', lambda: self.rotate(90)))
-        self.save_rotation_button = self.button('この画像を採用して保存', self.save_rotation, True)
+        self.save_rotation_button = self.button('採用して保存', self.save_rotation, True)
         self.save_rotation_button.setToolTip('回転なしでも採用してDBを更新します。回転時は元画像を残し、補正コピーを保存して採用します。')
         rotations.addWidget(self.save_rotation_button)
         self.save_rotation_button.setEnabled(False)
         detail.addLayout(rotations)
         self.provenance = label('', 'muted')
         self.provenance.setWordWrap(True)
-        detail.addWidget(self.provenance)
+        metadata_layout.addWidget(self.provenance)
         self.artworks = QListWidget()
-        self.artworks.setMaximumHeight(105)
+        self.artworks.setMaximumHeight(75)
         self.artworks.currentItemChanged.connect(self.show_artwork)
         detail.addWidget(self.artworks)
         self.select_button = self.button('表示中の画像を採用', self.select_artwork)
-        detail.addWidget(self.select_button)
+        metadata_layout.addWidget(self.select_button)
         title_layout.addWidget(label('日本語タイトル', 'section'))
         self.title_context = label('', 'muted')
         self.title_context.setWordWrap(True)
@@ -370,14 +389,13 @@ class MainWindow(QMainWindow):
         self.evidence.setReadOnly(True)
         self.evidence.setMinimumHeight(110)
         self.evidence.setMaximumHeight(180)
-        title_layout.addWidget(self.evidence)
+        metadata_layout.addWidget(self.evidence)
         title_layout.addWidget(self.button('タイトルを確定して保存', self.confirm_title, True))
-        title_layout.addWidget(self.button('確定を解除して再照合の対象に戻す', self.unconfirm_title))
-        title_layout.addStretch()
+        metadata_layout.addWidget(self.button('確定を解除して再照合の対象に戻す', self.unconfirm_title))
         splitter.addWidget(details)
         splitter.setSizes([870, 420])
         page.addWidget(splitter, 1)
-        page.addWidget(label('PCのROM登録 → 日本語名のDB照合 → Skraper取得 → 内容・向きを確認して承諾 → 実機にないROM・画像・日本語名を転送', 'notice'))
+        page.addWidget(label('PCのROM登録 → Skraper取得 → ゲームをチェック → 名前・画像を確認してMiSTerへ転送（画像・日本語名がなくても進めます）', 'notice'))
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
         page.addWidget(self.progress_bar)
@@ -459,24 +477,26 @@ class MainWindow(QMainWindow):
 
     def choose_transfer(self):
         games = self.visible_games()
-        devices = {g['device'] for g in games}
+        targets = [g for g in games if g['id'] in self.model.checked_ids]
+        if not targets:
+            QMessageBox.information(self, 'ゲームを選択', '転送するゲームをチェックしてください。')
+            return
+        devices = {g['device'] for g in targets}
         if len(devices) != 1:
             QMessageBox.warning(self, '実機を選択', '転送する実機を1台に絞り込んでください。')
             return
-        checked = [g for g in games if g['id'] in self.model.checked_ids]
-        targets = checked or games
         if len({g['system'] for g in targets}) != 1:
             QMessageBox.warning(self, '機種を選択', '転送する機種を1つに絞り込んでください。')
             return
         try:
-            plan = with_db(self.db_path, lambda db: batch_plan(db, targets))
+            plan = with_db(self.db_path, lambda db: review_transfer_plan(db, targets))
             items, titles, roms = plan['images'], plan['titles'], plan['roms']
             if not items and not titles and not roms:
                 raise ValueError('転送する選択済み画像・確定済みの日本語ソフト名がありません')
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, '転送内容を確認', str(error))
             return
-        dialog = TransferDialog(items, titles, self, roms=roms, db_path=self.db_path)
+        dialog = TransferDialog(items, titles, self, roms=roms, db_path=self.db_path, review_rows=plan['review_rows'])
         profile = system_profile(targets[0]['system'])
         dialog.setWindowTitle(profile.name + ' · ROM・画像・日本語名を転送' + ('（実機未検証）' if not profile.verified else ''))
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -486,6 +506,7 @@ class MainWindow(QMainWindow):
         titles = titles if dialog.titles.isChecked() else {}
         roms = roms if dialog.roms.isChecked() else []
         verify_roms = dialog.verify_roms.isChecked()
+        send_images, send_titles, send_roms = dialog.images.isChecked(), dialog.titles.isChecked(), dialog.roms.isChecked()
         credentials = [dialog.host.text().strip(), dialog.user.text().strip(), dialog.password.text()]
         commit(self.db_path, *credentials, dialog.remember.isChecked())
         dialog.password.clear()
@@ -496,9 +517,11 @@ class MainWindow(QMainWindow):
             return
         def operation(cancelled, progress):
             try:
+                accepted = with_db(self.db_path, lambda db: accept_transfer_review(db, targets, plan,
+                    images=send_images, titles=send_titles, roms=send_roms, cancelled=cancelled))
                 return transfer_images(items, *credentials, Path(self.db_path).parent / 'transfer-backups',
                                        cancelled=cancelled, progress=progress, titles=titles, roms=roms,
-                                       title_targets=plan['title_targets'], verify_existing_roms=verify_roms)
+                                       title_targets=accepted['title_targets'], verify_existing_roms=verify_roms)
             finally:
                 credentials.clear()
         def completed(result):
@@ -508,7 +531,7 @@ class MainWindow(QMainWindow):
             if result.get('cancelled'):
                 message = ('転送を中断し、反映済みファイルを元に戻しました。' if result.get('rolled_back')
                            else '転送を中断しました。自動復旧が未完了です。転送記録から復旧してください。') + message
-            self.status_label.setText(message)
+            self.saved(message)
             QMessageBox.information(self, '転送の結果', message + '\nConsole Modeを終了して入り直し、日本語名と画像を確認してください。必要に応じ画像を再最適化してください。')
         self.start_task(operation, completed, 'ROM・画像・日本語ソフト名を確認・転送中…')
 
@@ -976,40 +999,55 @@ class MainWindow(QMainWindow):
         self.check_all.setEnabled(bool(ids) and self.task is None)
         self.check_count.setText('%d / %d本をチェック' % (count, len(ids)))
         self.approve_button.setEnabled(count > 0 and self.task is None)
+        self.transfer_button.setEnabled(count > 0 and self.task is None)
 
     def approve_checked(self):
         games = [g for g in self.visible_games() if g['id'] in self.model.checked_ids]
         if not games or self.task is not None:
             return
-        plan = approval_plan(games)
+        plan = approval_plan(games, include_weak=True)
         dialog = QDialog(self)
-        dialog.setWindowTitle('チェックした候補の一括承諾')
+        dialog.setWindowTitle('チェックしたゲームの名前・画像を確認')
         dialog.resize(860, 560)
         layout = QVBoxLayout(dialog)
         layout.addWidget(label('%d本の候補をまとめて確認' % len(plan), 'section'))
-        layout.addWidget(label('確定済み・選択済みは保持します。複数候補は個別確認のため対象外です。', 'muted'))
+        layout.addWidget(label('画像や日本語名がなくても転送できます。複数候補は元の画面で選択できます。', 'muted'))
+        review_list = QListWidget()
+        layout.addWidget(review_list, 1)
+        advanced_toggle = QToolButton()
+        advanced_toggle.setText('詳細設定')
+        advanced_toggle.setCheckable(True)
+        layout.addWidget(advanced_toggle)
+        advanced = QWidget()
+        advanced_layout = QVBoxLayout(advanced)
+        advanced.setVisible(False)
+        advanced_toggle.toggled.connect(advanced.setVisible)
+        layout.addWidget(advanced)
         titles = QCheckBox('日本語名の候補を確定する')
         titles.setChecked(True)
         images = QCheckBox('画像候補を採用する（補正済み画像があれば優先）')
         images.setChecked(True)
         weak = QCheckBox('名前一致のみの候補も含める（単一候補のみ。地域・版は未照合なので一覧を確認してください）')
-        layout.addWidget(titles)
-        layout.addWidget(images)
-        layout.addWidget(weak)
+        weak.setChecked(True)
+        advanced_layout.addWidget(titles)
+        advanced_layout.addWidget(images)
+        advanced_layout.addWidget(weak)
         report = QPlainTextEdit()
         report.setReadOnly(True)
-        layout.addWidget(report, 1)
+        report.setMaximumHeight(130)
+        advanced_layout.addWidget(report)
         summary = label('', 'muted')
         layout.addWidget(summary)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText('この内容でまとめて承諾')
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText('確認した内容を保存')
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         def preview():
             plan[:] = approval_plan(games, include_weak=weak.isChecked())
             lines = []
-            for item in plan:
+            rows = []
+            for game, item in zip(games, plan):
                 title = item['title'] if titles.isChecked() else None
                 artwork = item['artwork'] if images.isChecked() else None
                 lines.append('%s\n  日本語名: %s\n  画像: %s\n' % (item['rom_filename'],
@@ -1017,11 +1055,19 @@ class MainWindow(QMainWindow):
                      (item['title_note'] if titles.isChecked() else '変更しない')),
                     (Path(artwork['local_path']).name + ' / ' + item['image_note']) if artwork else
                     (item['image_note'] if images.isChecked() else '変更しない')))
+                rows.append(dict(rom_filename=game['rom_filename'],
+                    display_title=title or game.get('japanese_title') or Path(game['rom_filename']).stem,
+                    image_path=(artwork['local_path'] if artwork else game.get('artwork_path')),
+                    title_note=(item['title_note'] if title or game.get('japanese_title') else '日本語名なし・ROM名で表示')
+                        if titles.isChecked() else '日本語名は変更しない',
+                    image_note=(item['image_note'] if artwork or game.get('artwork_path') else '画像なし・画像は追加しない')
+                        if images.isChecked() else '画像は変更しない'))
+            populate_review(review_list, rows)
             report.setPlainText('\n'.join(lines))
             title_count = sum(i['title'] is not None for i in plan) if titles.isChecked() else 0
             image_count = sum(i['artwork'] is not None for i in plan) if images.isChecked() else 0
             summary.setText('日本語名 %d件 / 画像 %d件 · PC内へ保存（MiSTerへの転送なし）' % (title_count, image_count))
-            buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(title_count + image_count > 0)
+            buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(True)
         titles.toggled.connect(preview)
         images.toggled.connect(preview)
         weak.toggled.connect(preview)
@@ -1030,13 +1076,14 @@ class MainWindow(QMainWindow):
             return
         use_titles, use_images = titles.isChecked(), images.isChecked()
         def accepted(result):
-            self.model.set_checks(set(result['applied_ids']), False)
-            self.saved('一括承諾: 日本語名 %d件 / 画像 %d件 / 競合 %d件 / エラー %d件%s' %
+            if result['applied_ids'] and self.pending_only.isChecked():
+                self.pending_only.setChecked(False)
+            self.saved('確認内容を保存: 日本語名 %d件 / 画像 %d件 / 競合 %d件 / エラー %d件%s' %
                 (result['titles'], result['images'], result['conflicts'], result['errors'],
                  ' / 中断' if result['cancelled'] else ''))
         self.start_task(lambda cancelled, progress: with_db(self.db_path, lambda db:
             apply_approval(db, plan, titles=use_titles, images=use_images, cancelled=cancelled, progress=progress)),
-            accepted, 'チェックした候補を一括承諾中…')
+            accepted, '確認した名前と画像を保存中…')
 
     def show_game(self, index, previous=None):
         game = index.data(Qt.ItemDataRole.UserRole)
@@ -1138,7 +1185,7 @@ class MainWindow(QMainWindow):
     def update_rotation_controls(self):
         self.save_rotation_button.setEnabled(self.task is None and self.current_artwork is not None
                                              and self.pixmap is not None)
-        self.save_rotation_button.setText('この向きで保存・採用' if self.angle else 'この画像を採用して保存')
+        self.save_rotation_button.setText('この向きで保存' if self.angle else '採用して保存')
 
     def update_provenance(self):
         artwork = self.current_artwork

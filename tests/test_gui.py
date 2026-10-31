@@ -14,6 +14,78 @@ HAS_QT = importlib.util.find_spec('PyQt6') is not None
 
 @unittest.skipUnless(HAS_QT, 'optional GUI dependency PyQt6 is not installed')
 class GUITests(unittest.TestCase):
+    def test_transfer_without_checks_never_falls_back_to_all_games(self):
+        from gui.app import MainWindow
+        from gui.transfer_dialog import TransferDialog
+        from database.store import Store
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'db'
+            db = Store(path)
+            db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                self.assertFalse(window.transfer_button.isEnabled())
+                with patch('gui.app.QMessageBox.information'), patch.object(TransferDialog, 'exec') as dialog:
+                    window.choose_transfer()
+                dialog.assert_not_called()
+            finally:
+                window.close()
+
+    def test_transfer_reviews_pending_names_and_allows_missing_images_and_names(self):
+        from gui.app import MainWindow
+        from gui.transfer_dialog import TransferDialog
+        from database.store import Store
+        from PyQt6.QtWidgets import QDialog
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'db'
+            db = Store(path)
+            ids = []
+            for name in ('Candidate', 'English'):
+                rom = root / (name + '.nes')
+                rom.write_bytes(b'rom')
+                ids.append(db.register_local_rom('test', 'NES', rom))
+            db.save_candidates(ids[0], [dict(japanese_title='日本語候補', score=.8, reason='タイトル名一致')])
+            db.close()
+            window = MainWindow(path)
+            transferred = []
+            try:
+                self.wait_idle(window)
+                window.model.set_checks(ids, True)
+                def inspect(dialog):
+                    self.assertTrue(dialog.advanced.isHidden())
+                    self.assertEqual(dialog.review_list.count(), 2)
+                    self.assertIn('日本語候補', dialog.review_list.item(0).text())
+                    self.assertIn('画像なし', dialog.review_list.item(0).text())
+                    self.assertIn('English', dialog.review_list.item(1).text())
+                    db = Store(path)
+                    self.assertIsNone(db.game(ids[0])['japanese_title'])
+                    db.close()
+                    dialog.host.setText('192.0.2.10')
+                    return QDialog.DialogCode.Accepted
+                def transfer(items, *args, **kwargs):
+                    self.assertEqual(items, [])
+                    self.assertEqual(kwargs['titles'], {'Candidate': '日本語候補'})
+                    self.assertEqual(len(kwargs['roms']), 2)
+                    transferred.append(True)
+                    return dict(transferred=0, titles_transferred=1, roms_transferred=2, roms_skipped=0, report='test-report')
+                with patch.object(TransferDialog, 'exec', return_value=QDialog.DialogCode.Rejected):
+                    window.choose_transfer()
+                with patch.object(TransferDialog, 'exec', inspect), patch('gui.app.transfer_images', side_effect=transfer), \
+                        patch('gui.app.QMessageBox.information'):
+                    window.choose_transfer()
+                    self.wait_idle(window)
+                self.assertEqual(transferred, [True])
+                self.assertTrue(set(ids).issubset(window.model.checked_ids))
+                db = Store(path)
+                self.assertEqual(db.game(ids[0])['japanese_title'], '日本語候補')
+                self.assertIsNone(db.game(ids[1])['japanese_title'])
+                db.close()
+            finally:
+                window.close()
+
     def test_removed_3do_records_and_old_scope_do_not_break_library_loading(self):
         from database.store import Store
         from gui.app import MainWindow
@@ -340,6 +412,7 @@ class GUITests(unittest.TestCase):
                 with patch.object(TransferDialog, 'exec', accept), patch(
                         'gui.app.transfer_images', side_effect=transfer), patch(
                         'gui.app.QMessageBox.information'):
+                    window.model.set_checks([g['id'] for g in window.visible_games()], True)
                     window.choose_transfer()
                     self.wait_idle(window)
                 self.assertEqual([r['remote_path'] for r in captured], ['/media/fat/games/SNES/Game.sfc'])
@@ -528,6 +601,8 @@ class GUITests(unittest.TestCase):
         dialog.host.setText('192.0.2.10')
         try:
             self.assertTrue(dialog.images.isChecked())
+            self.assertTrue(dialog.advanced.isHidden())
+            self.assertTrue(dialog.images.isHidden() or dialog.images.parentWidget().isHidden())
             self.assertTrue(dialog.titles.isChecked())
             self.assertIn('Game → ゲーム', dialog.preview.toPlainText())
             self.assertIn('画像 1枚 / 日本語ソフト名 1本', dialog.summary.text())
@@ -743,8 +818,9 @@ class GUITests(unittest.TestCase):
                 def accept(dialog):
                     boxes = dialog.findChildren(QCheckBox)
                     self.assertEqual(len(boxes), 3)
-                    # The weak-match option starts off, so title-name-only candidates are never silently included.
-                    self.assertFalse(next(b for b in boxes if '名前一致のみ' in b.text()).isChecked())
+                    # A single spelling is shown for explicit review without another opt-in checkbox.
+                    self.assertTrue(next(b for b in boxes if '名前一致のみ' in b.text()).isChecked())
+                    self.assertTrue(all(b.parentWidget().isHidden() for b in boxes))
                     return QDialog.DialogCode.Accepted
                 with patch.object(QDialog, 'exec', accept):
                     window.approve_checked()
@@ -756,7 +832,7 @@ class GUITests(unittest.TestCase):
                     self.assertEqual(db.game(ids[0])['sync_status'], 'blocked')
                 finally:
                     db.close()
-                self.assertNotIn(ids[0], window.model.checked_ids)
+                self.assertIn(ids[0], window.model.checked_ids)
                 self.assertIn(ids[1], window.model.checked_ids)
             finally:
                 self.wait_idle(window)
