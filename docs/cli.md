@@ -19,7 +19,7 @@ mister-jp-library list --device living-room
 ```
 
 register-romsはサブフォルダーも探索します。`--root` で機種の対応ルートを選べます。
-CLIでは登録のみが既定です。Retronianによる日本語名照合も行う場合は `--lookup` を付けます。
+CLIでは登録のみが既定です。対応する公開DBによる日本語名照合も行う場合は `--lookup` を付けます。
 
 実機からファイル名だけを登録する場合はscanを使います。
 
@@ -52,7 +52,20 @@ matchはインポートした別名を使い、未確定ゲームの候補を置
 既存のRetronian候補も置換対象になるため、併用する場合は候補の出所を確認してください。
 確定名は再照合で上書きしません。`delete-aliases <source>` は出典単位でインポート済み別名を削除します。
 
+## 日本語名DBの書き出しとマージ
+
+日本語名の候補・確定名を再利用用JSONとして保存する場合は、次のコマンドを使います。[形式とマージ規則](title-db.md)も参照してください。
+
+```powershell
+mister-jp-library export-title-db --out work/title-db/titles.json
+mister-jp-library export-title-db --system SATURN --confirmed-only --hash-roms --out work/title-db/saturn.json
+mister-jp-library merge-title-db work/title-db/titles.json work/title-db/saturn.json --out work/title-db/merged.json
+```
+
+`export-title-db` は `--device`・`--system`・`--confirmed-only` で絞れます。`--hash-roms` を付けるとローカルROMを読み、SHA-256を追加します。ZIPでは内部ROMのハッシュです。マージはネット接続やライブラリDBを必要とせず、既存ファイルは上書きしません。
+
 ## 画像取得
+
 
 ```powershell
 mister-jp-library artwork-url 'Exact Catalog Title (Japan)' --system NES

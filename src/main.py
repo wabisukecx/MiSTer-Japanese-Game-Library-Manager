@@ -109,6 +109,15 @@ def parser():
     plan.add_argument('--device')
     plan.add_argument('--out', required=True)
     commands.add_parser('export', help='report why Console Mode export is blocked')
+    titles = commands.add_parser('export-title-db', help='write a portable attributed Japanese title database JSON')
+    titles.add_argument('--out', required=True, help='new output JSON; existing files are never overwritten')
+    titles.add_argument('--device')
+    titles.add_argument('--system', choices=SYSTEMS)
+    titles.add_argument('--confirmed-only', action='store_true')
+    titles.add_argument('--hash-roms', action='store_true', help='read registered local ROMs to compute SHA-256')
+    merge_titles = commands.add_parser('merge-title-db', help='merge title database JSONs offline without confirming titles')
+    merge_titles.add_argument('paths', nargs='+')
+    merge_titles.add_argument('--out', required=True)
     commands.add_parser('gui', help='open the local PyQt6 library and Skraper image importer')
     register = commands.add_parser('register-roms', help='register a PC folder recursively using the shared workflow')
     register.add_argument('folder')
@@ -124,7 +133,12 @@ def parser():
 
 
 def execute(args, db):
-    if args.command == 'register-roms':
+    if args.command == 'export-title-db':
+        from metadata.title_catalog import export_catalog, write_catalog
+        games = [g for g in db.games(device=args.device) if (not args.system or g['system'] == args.system)
+                 and (not args.confirmed_only or g['match_status'] == 'confirmed')]
+        emit(write_catalog(args.out, export_catalog(db, games, hash_roms=args.hash_roms)))
+    elif args.command == 'register-roms':
         from workflow import register_folder
         emit(register_folder(db, args.folder, args.device, args.system,
             args.root or system_profile(args.system).root,
@@ -243,6 +257,14 @@ def main(argv=None):
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
     args = parser().parse_args(argv)
+    if args.command == 'merge-title-db':
+        from metadata.title_catalog import read_catalog, merge_catalogs, write_catalog
+        try:
+            emit(write_catalog(args.out, merge_catalogs(read_catalog(p) for p in args.paths)))
+            return 0
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            print('Error: ' + str(error), file=sys.stderr)
+            return 2
     if args.command == 'recover-transfer':
         from mister.recovery import recover_transfer
         try:

@@ -11,8 +11,11 @@ MiSTer Console Modeの日本語ゲーム名とパッケージ画像をPCで整�
 - 不足するROM・選択画像・確定済みの日本語名をFTPで一括転送
 - 転送前バックアップ、読み戻し照合、失敗・中断時の復旧
 - 実機のROM一覧取得と、名前の更新候補の比較
+- 出典・確定名・判断履歴を含む日本語名DBのJSON書き出しとマージ（[使い方](docs/title-db.md)）
 
-ファミコン、スーパーファミコン、メガドライブ、ゲームボーイ、ゲームボーイカラー、ゲームボーイアドバンス、PCエンジン、PlayStation（CHD）、NINTENDO 64、ネオジオ（.neo）、ワンダースワン、ワンダースワンカラーに対応します。[機種ごとの形式・保存先](docs/systems.md)を確認してください。
+ファミコン、スーパーファミコン、メガドライブ、ゲームボーイ、ゲームボーイカラー、ゲームボーイアドバンス、PCエンジン、PCエンジン CD-ROM²（CHD）、PlayStation（CHD）、セガサターン（CHD）、NINTENDO 64、ネオジオ（.neo）、ワンダースワン、ワンダースワンカラーに対応します。[機種ごとの形式・保存先](docs/systems.md)を確認してください。
+
+ディスクシステム、SG-1000、セガ・マークIII／マスターシステム、ゲームギア、スーパー32X、メガCD（CHD）、ネオジオポケット／カラー、バーチャルボーイにも対応します。国内発売済みで日本語名データを確認できた機種を対象にしており、全ソフトの日本語名が揃っているわけではありません。
 
 ## 使い始める前の準備
 
@@ -75,11 +78,12 @@ Skraperでのログイン・取得設定・取得開始はSkraper側で行いま
 ## データと対応範囲
 
 登録情報・画像・キャッシュ・バックアップは既定で `work/` に保存します。ROM・取得画像・取得した日本語名DB・認証情報・Skraper本体はリポジトリに含めません。
-日本語名の候補には [Retronian GameDB](https://github.com/retronian/retronian-gamedb) を使用します。取得データのライセンス表記と出典はローカルに保存します。[データ管理と取得元](docs/data.md)
+日本語名の候補には [Retronian GameDB](https://github.com/retronian/retronian-gamedb) を使用し、PCエンジン CD-ROM²・PlayStation・セガサターンでは [Redump Local Names](https://github.com/yingw/redump-local-names) の対応表も併用します。候補の出典と取得データの利用条件はローカルに保存します。[データ管理と取得元](docs/data.md)
+メガCDではRedump Local Namesを使用します。[GameDataBase by PigSaint](https://github.com/PigSaint/GameDataBase)（CC BY 4.0）はディスクシステム等の追加機種に加え、既存のFC・SFC・GB系・N64・メガドライブ・メガCD・サターン・PCエンジン系でも利用します。機種ごとに対応データのあるDBをすべて照合し、全角・半角と空白だけの違いは出典を残してまとめます。表記が競合した場合は個別に確認し、確定済みの名前は保持します。
 
-対象ROMが1本入ったZIPに対応し、ZIPのまま転送します。実機の子フォルダーへの転送、7z・RAR、PS1のCHD以外のディスクイメージ、複数ROM入りのMAME・FBNeo ZIP、背景生成、Console Modeの画像キャッシュ更新は対象外です。汎用 `export` コマンドも停止状態です。
+対象ROMが1本入ったZIPに対応し、ZIPのまま転送します。実機の子フォルダーへの転送、7z・RAR、ディスクシステムのFDSと対応CD機種のCHD以外のディスクイメージ、複数ROM入りのMAME・FBNeo ZIP、背景生成、Console Modeの画像キャッシュ更新は対象外です。汎用 `export` コマンドも停止状態です。
 
-ファミコン・スーパーファミコン・メガドライブ・ゲームボーイ・ゲームボーイカラー・ゲームボーイアドバンス・PCエンジンは一部タイトルで実機確認済みです。
+ファミコン・スーパーファミコン・メガドライブ・ゲームボーイ・ゲームボーイカラー・ゲームボーイアドバンス・PCエンジン・ネオジオは一部タイトルで実機確認済みです。
 
 ## 開発
 
@@ -93,4 +97,4 @@ Skraperでのログイン・取得設定・取得開始はSkraper側で行いま
 
 ## ライセンス
 
-本ツールのソースコードは [MIT License](LICENSE) で公開します。Retronian GameDBのデータ（CC BY-SA 4.0）、Skraper、ScreenScraper、画像、ROMは本リポジトリに含まれず、それぞれの提供元の条件に従います。
+本ツールのソースコードは [MIT License](LICENSE) で公開します。Retronian GameDBのデータ（CC BY-SA 4.0）、GameDataBase by PigSaint（CC BY 4.0）、Redump由来のデータ、Skraper、ScreenScraper、画像、ROMは本リポジトリに含まれず、それぞれの提供元の条件に従います。

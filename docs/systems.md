@@ -11,17 +11,33 @@
 | ゲームボーイカラー | `GBC` | `/media/fat/games/GBC` | `.gbc` |
 | ゲームボーイアドバンス | `GBA` | `/media/fat/games/GBA` | `.gba` |
 | PCエンジン | `PCE` | `/media/fat/games/TGFX16` | `.pce`, `.sgx` |
+| PCエンジン CD-ROM² | `PCECD` | `/media/fat/games/TGFX16-CD` | `.chd` |
 | PlayStation | `PS1` | `/media/fat/games/PSX` | `.chd` |
+| セガサターン | `SATURN` | `/media/fat/games/Saturn` | `.chd` |
 | NINTENDO 64 | `N64` | `/media/fat/games/N64` | `.n64`, `.z64`, `.v64` |
 | ネオジオ | `NEOGEO` | `/media/fat/games/NEOGEO` | `.neo` |
 | ワンダースワン | `WS` | `/media/fat/games/WonderSwan` | `.ws` |
 | ワンダースワンカラー | `WSC` | `/media/fat/games/WonderSwanColor` または `/media/fat/games/WONDERSWAN_COLOR` | `.wsc` |
+| ファミコン ディスクシステム | `FDS` | `/media/fat/games/FDS` | `.fds` |
+| SG-1000 | `SG1000` | `/media/fat/games/SG1000` | `.sg` |
+| セガ・マークIII／マスターシステム | `SMS` | `/media/fat/games/SMS` | `.sms` |
+| ゲームギア | `GG` | `/media/fat/games/GameGear` | `.gg` |
+| スーパー32X | `S32X` | `/media/fat/games/S32X` | `.32x` |
+| メガCD | `MCD` | `/media/fat/games/MegaCD` | `.chd` |
+| ネオジオポケット | `NGP` | `/media/fat/games/NGPC` または `/media/fat/games/NGP` | `.ngp` |
+| ネオジオポケットカラー | `NGPC` | `/media/fat/games/NGPC` または `/media/fat/games/NGP` | `.ngc`, `.npc` |
+| バーチャルボーイ | `VB` | `/media/fat/games/VirtualBoy` | `.vb` |
 
-全機種で対象ROMが1本入ったZIPも扱えます。PCエンジンは「モトローダー」で転送・実機動作まで確認済みです。対応機種でも、すべてのROM・Console Mode構成を確認したわけではありません。
+対象ROMが1本入ったZIPも扱えます。PCエンジンは「モトローダー」で転送・実機動作まで確認済みです。対応機種でも、すべてのROM・Console Mode構成を確認したわけではありません。
 定義は [systems.py](../src/systems.py) にまとめています。
 
-追加5機種は実機未検証です。GUIの機種フィルター・PC登録ダイアログ・CLIから選べます。
-PS1は単体CHDのみ対応し、CUE/BINの関連ファイル転送やM3Uによる複数ディスク管理は行いません。ネオジオは単体 `.neo` のみ対応し、複数チップのROMを含むMAME・FBNeo ZIPは扱いません。
+ネオジオは `.neo` のSkraperでの画像取得、MiSTerへの転送、実機での起動・プレイまで確認済みです。SkraperではNeo Geoの対象拡張子に `.neo` を追加してください。
+実機検証済みはファミコン・スーパーファミコン・メガドライブ・ゲームボーイ・ゲームボーイカラー・ゲームボーイアドバンス・PCエンジン・ネオジオです。他の機種は実機未検証として表示します。GUIの機種フィルター・PC登録ダイアログ・CLIから選べます。
+PCエンジン CD-ROM²・PS1・セガサターン・メガCDは単体CHDのみ対応し、CUE/BINの関連ファイル転送やM3Uによる複数ディスク管理は行いません。ネオジオは単体 `.neo` のみ対応し、複数チップのROMを含むMAME・FBNeo ZIPは扱いません。
+PCエンジン CD-ROM²はHuCARD版とは別の機種として登録します。SkraperではPC Engine CD-Rom（機種ID 114）を選び、`.chd` が対象拡張子に含まれていることを確認してください。画像・別名の反映先もCD用のROMルートになります。
+PCエンジン CD-ROM²・PS1・セガサターンの日本語名はRetronianとRedump Local Namesを併用します。CHDに変換する前のRedump DAT名がファイル名に残っていると照合しやすくなります。表記の違う候補は出典を確認して選んでください。
+メガCDの日本語名にはRedump Local Namesを、ディスクシステム・SG-1000・マークIII・ゲームギア・32X・ネオジオポケット／カラー・バーチャルボーイにはPigSaintのGameDataBaseを使います。日本語名が未収録のソフトもあり、全タイトルの変換を保証するものではありません。
+GameDataBaseはFC・SFC・GB系・N64・メガドライブ・メガCD・サターン・PCエンジン系の補完にも利用し、機種ごとに利用可能なDBをすべて照合します。[候補の統合・採用ルール](data.md#日本語名データ)も参照してください。
 CHD・.neo・N64のバイト順違いなど、DBのROMと内容が異なる形式はハッシュが一致しないため、ROM名・タイトル名の照合候補を確認してください。
 転送先と形式は [Console Mode配布設定](https://github.com/Retro-Remake/ConsoleMode_Distribution/tree/main/section_groups) に合わせています。
 
@@ -34,13 +50,14 @@ PC側の登録はサブフォルダーを探索し、MiSTerへの転送は機種
 メガドライブの2つのルートは、使用中の実機の構成に合わせて選びます。同じ転送で両ルートを混在させることはできません。
 ゲームボーイとゲームボーイカラーは混在したPCフォルダーから登録できますが、画像取り込みと転送は機種ごとに行います。
 ワンダースワンとワンダースワンカラーも、拡張子により混在フォルダーから振り分けて登録します。
+ネオジオポケットとカラーも、混在したPCフォルダーから拡張子で振り分けます。実機ではConsole Modeの配布設定に合わせ、どちらも `NGPC` を標準ルートに使います。
 
 ## ZIP
 
 ZIPは展開せず、そのまま同じファイル名で転送します。内部ROMは日本語名照合用のハッシュ計算に使います。
 画像名と別名キーはZIPの基本名に対応します。例として `Example.zip` の画像は `media/Example.png`、別名は `Example=日本語名` となります。
 
-選択機種の対象ROMはZIP内に1本だけ必要です。内部ROMの上限は通常64 MiB、PS1は1 GiB、ネオジオは128 MiBです。暗号化ZIP、上限を超える内部ROM、危険なエントリ名やリンクは拒否します。
+選択機種の対象ROMはZIP内に1本だけ必要です。内部ROMの上限は通常64 MiB、PCエンジン CD-ROM²・PS1・セガサターン・メガCDは1 GiB、ネオジオは128 MiBです。暗号化ZIP、上限を超える内部ROM、危険なエントリ名やリンクは拒否します。
 7z・RAR・複数の対象ROMを含むZIPは扱いません。
 
 ## 表示データ
@@ -51,8 +68,10 @@ ZIPは展開せず、そのまま同じファイル名で転送します。内�
 
 ## 対象外
 
+3DOは公式コアがWIP／ベータ扱いのため、本ツールの対応対象から除外しています。以前の登録情報や取得データは削除せず、GUIと日本語名DBの新規書き出しの対象から外します。
+
 - 独自のROMルートや子フォルダーへの転送
-- PS1のCHD以外のディスクイメージ（PCエンジンのCD-ROM版など）
+- ディスクシステムのFDSおよび対応CD機種のCHD以外のディスクイメージ
 - ROMの入手、名前の自動変更、消えたROMの自動削除
 - 背景画像生成、汎用リサイズ、Console Modeのキャッシュ更新
 - SFTP接続、汎用Console Modeエクスポート

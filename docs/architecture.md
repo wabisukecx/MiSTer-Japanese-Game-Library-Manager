@@ -14,7 +14,7 @@ src/
 ├── systems.py            機種定義と転送先検査
 ├── gui/                  PyQt6の画面とワーカー
 ├── database/             SQLiteストア
-├── metadata/             名前照合と一括承諾
+├── metadata/             名前照合、一括承諾、出典付き日本語名DBの出力・マージ
 ├── artwork/              画像取得・取り込み・回転補正
 ├── mister/               FTP一覧・一括転送・復旧
 └── consolemode/          別名の統合と設定確認
@@ -25,7 +25,7 @@ src/
 ```text
 PCのROM ─── 登録・ZIP検査 ─┐
 実機の一覧 ─ FTPで列挙 ───┴─ SQLite
-Retronian ─ キャッシュ・照合 ─ 名前候補 ─ 確定
+Retronian / Redump / GameDataBase ─ 個別キャッシュ・照合 ─ 名前候補 ─ 確定
 Skraper ─ PNG取り込み・コピー ─ 画像候補 ─ 補正・採用
                                            │
                            現在のDBから転送計画を作成

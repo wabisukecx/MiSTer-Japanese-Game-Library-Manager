@@ -26,6 +26,8 @@ def rom_info(path, system, member=None):
         if member is not None or path.suffix.lower() not in extensions or not path.is_file():
             raise ValueError('機種に対応するROMファイルではありません: ' + path.name)
         return dict(name=path.name, size=path.stat().st_size, archive_member=None)
+    if '.zip' not in profile.extensions:
+        raise ValueError('この機種ではZIPに対応していません: ' + path.name)
     try:
         with zipfile.ZipFile(path) as archive:
             candidates = []

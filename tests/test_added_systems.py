@@ -15,7 +15,7 @@ from systems import SYSTEMS, ROM_EXTENSIONS, system_profile, transfer_rom
 from workflow import register_folder, batch_plan
 
 
-ADDITIONS = [('PS1', 'ps1', '.chd'), ('N64', 'n64', '.z64'),
+ADDITIONS = [('PCECD', 'pce', '.chd'), ('PS1', 'ps1', '.chd'), ('N64', 'n64', '.z64'),
              ('NEOGEO', 'neogeo', '.neo'), ('WS', 'ws', '.ws'), ('WSC', 'wsc', '.wsc')]
 
 
@@ -81,7 +81,8 @@ class AddedSystemsTests(unittest.TestCase):
                         entry.file_size += 1
                         with self.assertRaisesRegex(ValueError, 'MiB'):
                             rom_info(source, system)
-            for system, extension in [('PS1', '.cue'), ('PS1', '.bin'), ('N64', '.nds'), ('NEOGEO', '.bin')]:
+            for system, extension in [('PCECD', '.cue'), ('PCECD', '.bin'), ('PCECD', '.pce'),
+                                      ('PCE', '.chd'), ('PS1', '.cue'), ('PS1', '.bin'), ('N64', '.nds'), ('NEOGEO', '.bin')]:
                 with self.assertRaises(ValueError):
                     transfer_rom(dict(system=system, rom_path=system_profile(system).root + '/Game' + extension))
             with zipfile.ZipFile(root / 'Mame.zip', 'w') as archive:

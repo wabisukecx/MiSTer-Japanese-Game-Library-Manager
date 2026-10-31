@@ -14,8 +14,98 @@ HAS_QT = importlib.util.find_spec('PyQt6') is not None
 
 @unittest.skipUnless(HAS_QT, 'optional GUI dependency PyQt6 is not installed')
 class GUITests(unittest.TestCase):
+    def test_removed_3do_records_and_old_scope_do_not_break_library_loading(self):
+        from database.store import Store
+        from gui.app import MainWindow
+        from metadata.title_catalog import export_catalog
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'db'
+            db = Store(path)
+            with db.db:
+                db.db.execute("INSERT OR IGNORE INTO systems VALUES ('3DO')")
+                db.db.execute("""INSERT INTO games(device,system,rom_path,rom_filename,original_title)
+                    VALUES ('old','3DO','/media/fat/games/3DO/Game.chd','Game.chd','Game')""")
+            db.set_setting('ui/scope', dict(device='old', system='3DO', rom_folder=tmp))
+            self.assertEqual(export_catalog(db, db.games())['entries'], [])
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                self.assertEqual(window.system.findData('3DO'), -1)
+                self.assertEqual(window.model.rowCount(), 0)
+                db = Store(path)
+                self.assertEqual(len(db.games()), 1)
+                db.close()
+            finally:
+                window.close()
+
+    def test_title_database_export_and_merge_are_local_and_do_not_change_confirmation(self):
+        from gui.app import MainWindow
+        from database.store import Store
+        from metadata.title_catalog import read_catalog
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'db'
+            db = Store(path)
+            ident = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            db.confirm(ident, 'ゲーム')
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                exported, merged = root / 'export.json', root / 'merged.json'
+                with patch('gui.app.QFileDialog.getSaveFileName', return_value=(str(exported), 'JSON')):
+                    window.choose_title_db_export()
+                self.wait_idle(window)
+                self.assertEqual(read_catalog(exported)['entries'][0]['confirmed_titles'], ['ゲーム'])
+                with patch('gui.app.QFileDialog.getOpenFileNames', return_value=([str(exported), str(exported)], 'JSON')), \
+                        patch('gui.app.QFileDialog.getSaveFileName', return_value=(str(merged), 'JSON')):
+                    window.choose_title_db_merge()
+                self.wait_idle(window)
+                self.assertEqual(len(read_catalog(merged)['entries']), 1)
+                db = Store(path)
+                self.assertEqual(db.game(ident)['japanese_title'], 'ゲーム')
+                self.assertEqual(len(db.title_decisions(ident)), 1)
+                db.close()
+            finally:
+                window.close()
+
+    def test_grouped_candidates_show_each_source_and_keep_confirmation_explicit(self):
+        from gui.app import MainWindow
+        from database.store import Store
+        from PyQt6.QtCore import Qt
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'db'
+            db = Store(path)
+            ident = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            db.save_candidates(ident, [
+                dict(japanese_title='ゲーム Ａ', score=1, provider='retronian', source='retronian-url', license='CC BY-SA 4.0'),
+                dict(japanese_title='ｹﾞｰﾑA', score=1, provider='gamedatabase', source='csv-url', license='CC BY 4.0'),
+            ])
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                window.show_game(window.proxy.index(0, 0))
+                self.assertEqual(window.title_candidates.count(), 2)  # manual + one grouped title
+                window.title_candidates.setCurrentIndex(1)
+                text = window.evidence.toPlainText()
+                self.assertIn('ゲーム Ａ', text)
+                self.assertIn('ｹﾞｰﾑA', text)
+                self.assertIn('retronian-url', text)
+                self.assertIn('csv-url', text)
+                self.assertIn('CC BY-SA 4.0', text)
+                self.assertIn('CC BY 4.0', text)
+                self.assertTrue(window.evidence.isReadOnly())
+                self.assertNotEqual(window.current_game['match_status'], 'confirmed')
+            finally:
+                window.close()
+
     def test_added_systems_are_selectable_in_filter_and_registration(self):
         from gui.app import MainWindow
+        from gui.system_choices import SYSTEM_GROUPS
+        from systems import SYSTEMS
+        from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import QComboBox, QDialog
         from test_added_systems import ADDITIONS
         with tempfile.TemporaryDirectory() as tmp:
@@ -23,10 +113,20 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 self.assertEqual(window.system.findData('NDS'), -1)
+                expected = [identifier for _, group in SYSTEM_GROUPS for identifier in group]
+                self.assertEqual(len(expected), len(set(expected)))
+                self.assertEqual(set(expected), set(SYSTEMS))
+                self.assertEqual([window.system.itemData(i) for i in range(window.system.count())
+                                  if window.system.itemData(i)], expected)
+                for i in range(window.system.count()):
+                    if window.system.itemData(i) is None:
+                        self.assertFalse(window.system.model().item(i).flags() & Qt.ItemFlag.ItemIsSelectable)
                 for system, _, _ in ADDITIONS:
                     self.assertGreaterEqual(window.system.findData(system), 0)
                 def inspect(dialog):
                     combo = dialog.findChild(QComboBox, 'registrationSystem')
+                    self.assertIn(combo.currentData(), SYSTEMS)
+                    self.assertEqual([combo.itemData(i) for i in range(combo.count()) if combo.itemData(i)], expected)
                     self.assertEqual(combo.findData('NDS'), -1)
                     for system, _, _ in ADDITIONS:
                         index = combo.findData(system)

@@ -3,20 +3,20 @@ from pathlib import Path
 import sqlite3
 
 from artwork.skraper_import import inspect_png
+from .title_resolution import batch_title, evidence_rank
 
 
 def approval_plan(games):
     plan = []
     for game in games:
-        strong = [c for c in game['_titles'] if c.get('score') == 1 and c.get('japanese_title', '').strip()]
-        names = list(dict.fromkeys(c['japanese_title'] for c in strong))
+        single = batch_title(game['_titles'])
         title = None
         if game['match_status'] == 'confirmed':
             title_note = '確定済みを保持'
-        elif len(names) == 1:
-            title = names[0]
+        elif single:
+            title = single['japanese_title']
             # Score 1 also covers a ROM-name match whose content was never compared; say which it was.
-            hashed = any('SHA-256' in c.get('reason', '') for c in strong)
+            hashed = evidence_rank(single) == 3
             title_note = '候補を確定（ROM内容一致）' if hashed else '候補を確定（ROM名一致・内容は未照合）'
         else:
             title_note = '候補なし、または複数候補のため個別確認'
@@ -63,8 +63,8 @@ def apply_approval(db, plan, *, titles=True, images=True, cancelled=lambda: Fals
                     result['conflicts'] += 1
                     continue
                 if title is not None:
-                    live_names = {c['japanese_title'] for c in db.get_candidates(game['id']) if c.get('score') == 1}
-                    if live_names != {title} or any(ord(c) < 32 for c in title):
+                    live = batch_title(db.get_candidates(game['id']))
+                    if live is None or live['japanese_title'] != title or any(ord(c) < 32 for c in title):
                         raise ValueError('承諾するタイトル候補が変更されています')
                 if artwork is not None:
                     live = next((a for a in db.artworks(game['id']) if a['id'] == artwork['id']), None)
@@ -79,6 +79,7 @@ def apply_approval(db, plan, *, titles=True, images=True, cancelled=lambda: Fals
                 if title is not None:
                     db.db.execute("UPDATE games SET japanese_title=?,match_status='confirmed' WHERE id=?",
                                   (title, game['id']))
+                    db.record_title_decision(game['id'], 'batch_confirmed', game['japanese_title'], title)
                 if artwork is not None:
                     db.db.execute('UPDATE games SET artwork_source=?,artwork_region=?,artwork_path=? WHERE id=?',
                                   (row['source'], row['region'], row['local_path'], game['id']))

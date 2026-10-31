@@ -19,11 +19,13 @@ from artwork.skraper_import import plan_import, apply_import, inspect_png
 from artwork.skraper_config import system_paths
 from database.store import Store
 from metadata.approval import approval_plan, apply_approval
-from metadata.retronian import match_titles
+from metadata.titles import match_titles
+from metadata.title_resolution import group_candidates
 from workflow import register_folder, batch_plan
 from mister.recovery import recover_transfer, validate_journal
 from mister.artwork_transfer import transfer_images
 from .transfer_dialog import TransferDialog
+from .system_choices import populate_systems
 from systems import SYSTEMS, system_profile
 from mister.ftp_client import FTPReader
 
@@ -71,7 +73,7 @@ def with_db(path, operation):
 def load_library(path, cancelled, progress):
     def load(db):
         db.prune_missing_artworks(cancelled=cancelled)
-        games = db.games()
+        games = [game for game in db.games() if game['system'] in SYSTEMS]
         for index, game in enumerate(games):
             if cancelled():
                 raise InterruptedError('一覧の読み込みを中断しました')
@@ -167,7 +169,8 @@ class LibraryModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.ForegroundRole and index.column() == 4:
             return QColor('#14766a' if game['match_status'] == 'confirmed' else '#8e641a')
         if role == Qt.ItemDataRole.DisplayRole:
-            candidate = game['_titles'][0]['japanese_title'] if game['_titles'] else ''
+            groups = group_candidates(game['_titles'])
+            candidate = groups[0]['japanese_title'] if groups else ''
             title = game['japanese_title'] or (candidate + '（候補）' if candidate else '—')
             art = '選択済み' if game['artwork_path'] else ('候補 %d枚' % len(game['_artworks']) if game['_artworks'] else '未取得')
             status = {'confirmed': '確定済み', 'review': '要確認', 'unmatched': '未照合'}.get(game['match_status'], game['match_status'])
@@ -242,6 +245,8 @@ class MainWindow(QMainWindow):
         for text, callback in [
             ('日本語名をDBで再照合', self.choose_title_lookup),
             ('最新のDBを取得して確定済みと比較', self.choose_title_refresh),
+            ('日本語名DBを書き出す（JSON）', self.choose_title_db_export),
+            ('日本語名DBのJSONをマージ', self.choose_title_db_merge),
             ('実機のROM一覧を取得', self.choose_scan),
             ('日本語タイトル設定', self.choose_title_setup),
             ('転送記録から復旧', self.choose_recovery),
@@ -268,9 +273,7 @@ class MainWindow(QMainWindow):
         self.pending_only.toggled.connect(self.refilter)
         filters.addWidget(self.search)
         self.system = QComboBox()
-        self.system.addItem('すべての機種', '')
-        for profile in SYSTEMS.values():
-            self.system.addItem(profile.name + ('（実機未検証）' if not profile.verified else ''), profile.id)
+        populate_systems(self.system, include_all=True, show_unverified=True)
         self.system.currentIndexChanged.connect(self.refilter)
         filters.addWidget(self.system)
         filters.addWidget(self.pending_only)
@@ -362,8 +365,9 @@ class MainWindow(QMainWindow):
         self.title_edit = QLineEdit()
         self.title_edit.setPlaceholderText('日本語タイトルを入力')
         title_layout.addWidget(self.title_edit)
-        self.evidence = label('', 'muted')
-        self.evidence.setWordWrap(True)
+        self.evidence = QPlainTextEdit()
+        self.evidence.setReadOnly(True)
+        self.evidence.setMinimumHeight(110)
         self.evidence.setMaximumHeight(180)
         title_layout.addWidget(self.evidence)
         title_layout.addWidget(self.button('タイトルを確定して保存', self.confirm_title, True))
@@ -564,9 +568,10 @@ class MainWindow(QMainWindow):
         system.setObjectName('registrationSystem')
         system_note = label('')
         system_note.setWordWrap(True)
-        for profile in SYSTEMS.values():
-            system.addItem(profile.name, profile.id)
-        system.setCurrentIndex(max(0, system.findData(self.system.currentData())))
+        populate_systems(system)
+        selected = system.findData(self.system.currentData())
+        if selected >= 0:
+            system.setCurrentIndex(selected)
         def update_roots():
             root.clear()
             profile = system_profile(system.currentData())
@@ -644,6 +649,8 @@ class MainWindow(QMainWindow):
     @staticmethod
     def lookup_summary(result):
         offline = '（取得失敗のため保存済みDBを使用）' if 'offline-cache' in result['modes'].values() else ''
+        if result.get('warnings'):
+            offline += '（DB取得失敗 %d件・取得済みDBと既存候補で照合）' % len(result['warnings'])
         stamps = [t for t in result.get('fetched_at', {}).values() if t]
         fetched = ' / DB取得日 ' + time.strftime('%Y-%m-%d', time.localtime(min(stamps))) if stamps else ''
         return '日本語名候補 %d本 / 複数候補 %d本 / 該当なし %d本 / 確定済み保持 %d本%s%s' % (
@@ -651,6 +658,9 @@ class MainWindow(QMainWindow):
 
     def lookup_finished(self, result, suffix):
         self.saved(self.lookup_summary(result) + suffix)
+        if result.get('warnings'):
+            QMessageBox.warning(self, '一部の日本語名DBを取得できませんでした',
+                                '\n'.join(result['warnings']) + '\n取得できたDBと既存候補で照合しました。')
         if 'offline-cache' in result['modes'].values():
             QMessageBox.warning(self, '最新のDBを取得できませんでした',
                                 '通信に失敗したため、保存済みの古い日本語名DBで照合しました。\nネットワークを確認し、もう一度実行してください。')
@@ -660,6 +670,45 @@ class MainWindow(QMainWindow):
 
     def choose_title_lookup(self):
         self.run_title_lookup(False)
+
+    def choose_title_db_export(self):
+        from metadata.title_catalog import export_catalog, write_catalog
+        games = self.visible_games()
+        checked = [g for g in games if g['id'] in self.model.checked_ids]
+        targets = checked or games
+        if not targets:
+            QMessageBox.information(self, 'ROMを登録', '書き出すROMを登録・表示してください。')
+            return
+        default = Path(self.db_path).parent / 'title-db' / ('titles-' + time.strftime('%Y%m%d-%H%M%S') + '.json')
+        filename, _ = QFileDialog.getSaveFileName(self, '表示中またはチェックしたROMの日本語名DBを書き出す',
+                                                str(default), 'JSON (*.json)')
+        if not filename:
+            return
+        def operation(cancelled, progress):
+            document = with_db(self.db_path, lambda db: export_catalog(db, targets, cancelled=cancelled, progress=progress))
+            if cancelled():
+                raise InterruptedError('書き出しを中断しました')
+            return write_catalog(filename, document)
+        self.start_task(operation, lambda result: self.saved('日本語名DB %d件を書き出しました: %s' % (
+            result['entries'], result['path'])), '日本語名DBを出典・判断履歴付きで書き出し中…')
+
+    def choose_title_db_merge(self):
+        from metadata.title_catalog import read_catalog, merge_catalogs, write_catalog
+        filenames, _ = QFileDialog.getOpenFileNames(self, 'マージする日本語名DB JSONを選択',
+                                                    str(Path(self.db_path).parent / 'title-db'), 'JSON (*.json)')
+        if not filenames:
+            return
+        default = Path(self.db_path).parent / 'title-db' / ('merged-' + time.strftime('%Y%m%d-%H%M%S') + '.json')
+        output, _ = QFileDialog.getSaveFileName(self, 'マージ結果を新しいJSONに保存', str(default), 'JSON (*.json)')
+        if not output:
+            return
+        def operation(cancelled, progress):
+            document = merge_catalogs((read_catalog(p) for p in filenames), cancelled=cancelled)
+            if cancelled():
+                raise InterruptedError('マージを中断しました')
+            return write_catalog(output, document)
+        self.start_task(operation, lambda result: self.saved('日本語名DB %d件をマージ / 競合 %d件: %s' % (
+            result['entries'], result['conflicts'], result['path'])), '日本語名DBのJSONをマージ中…')
 
     def choose_title_refresh(self):
         self.run_title_lookup(True)
@@ -760,9 +809,10 @@ class MainWindow(QMainWindow):
         password.setEchoMode(QLineEdit.EchoMode.Password)
         device = QLineEdit(self.device.currentData() or 'home-mister')
         system = QComboBox()
-        for profile in SYSTEMS.values():
-            system.addItem(profile.name, profile.id)
-        system.setCurrentIndex(max(0, system.findData(self.system.currentData())))
+        populate_systems(system)
+        selected = system.findData(self.system.currentData())
+        if selected >= 0:
+            system.setCurrentIndex(selected)
         root = QComboBox()
         def update_roots():
             root.clear()
@@ -848,6 +898,8 @@ class MainWindow(QMainWindow):
         """Limit the list to the ROM folder registered last; it is remembered across restarts."""
         scope = with_db(self.db_path, lambda db: db.setting('ui/scope'))
         ids = set()
+        if scope and scope.get('system') not in SYSTEMS:
+            scope = None
         if scope:
             folder = Path(scope['rom_folder'])
             members = {scope['system'], *system_profile(scope['system']).siblings}
@@ -979,12 +1031,13 @@ class MainWindow(QMainWindow):
         self.title_candidates.blockSignals(True)
         self.title_candidates.clear()
         self.title_candidates.addItem('手動で入力する', None)
-        for candidate in game['_titles']:
-            self.title_candidates.addItem(candidate['japanese_title'] + '（候補）', candidate)
+        for candidate in group_candidates(game['_titles']):
+            suffix = '（推奨・ROM内容一致）' if candidate['recommended'] and candidate['rank'] == 3 else '（候補）'
+            self.title_candidates.addItem(candidate['japanese_title'] + suffix, candidate)
         self.title_candidates.blockSignals(False)
         self.title_candidates.setCurrentIndex(0)
         self.title_edit.setText(game['japanese_title'] or '')
-        self.evidence.setText('ユーザー確定済み' if game['match_status'] == 'confirmed' else '候補を選ぶか、タイトルを入力して確定してください。')
+        self.evidence.setPlainText('ユーザー確定済み' if game['match_status'] == 'confirmed' else '候補を選ぶか、タイトルを入力して確定してください。')
         self.artworks.clear()
         self.current_artwork = None
         self.pixmap = None
@@ -1011,12 +1064,18 @@ class MainWindow(QMainWindow):
         candidate = self.title_candidates.itemData(index)
         if candidate:
             self.title_edit.setText(candidate['japanese_title'])
-            self.evidence.setText('一致度 %s · %s\n出典: %s' % (candidate.get('score', '—'),
-                                 candidate.get('reason', ''), candidate.get('source', '不明')))
-            if candidate.get('provider') == 'retronian':
-                self.evidence.setText(self.evidence.text() + '\nRetronian GameDB / CC BY-SA 4.0 / 元データ: ' +
-                                      str(candidate.get('upstream_source', '不明')))
-            self.evidence.setToolTip(self.evidence.text())
+            blocks = []
+            labels = {'retronian': 'Retronian GameDB', 'redump': 'Redump',
+                      'gamedatabase': 'GameDataBase by PigSaint'}
+            for evidence in candidate.get('evidence', [candidate]):
+                blocks.append('%s / %s\n表記: %s\n一致度 %s · %s\n出典: %s\n元データ: %s' % (
+                    labels.get(evidence.get('provider'), '手動・その他'), evidence.get('license', '利用条件は出典を確認'),
+                    evidence['japanese_title'], evidence.get('score', '—'), evidence.get('reason', ''),
+                    evidence.get('source', '不明'), evidence.get('upstream_source', '不明')))
+                stamp = evidence.get('fetched_at')
+                if isinstance(stamp, (int, float)):
+                    blocks[-1] += '\nDB取得日: ' + time.strftime('%Y-%m-%d', time.localtime(stamp))
+            self.evidence.setPlainText('\n\n'.join(blocks))
 
     def show_artwork(self, item, previous=None):
         self.current_artwork = None

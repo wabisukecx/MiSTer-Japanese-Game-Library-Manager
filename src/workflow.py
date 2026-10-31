@@ -3,7 +3,7 @@ import os
 from pathlib import Path, PurePosixPath
 
 from systems import system_profile
-from metadata.retronian import match_titles
+from metadata.titles import match_titles
 from consolemode.titles import title_mapping
 from mister.artwork_transfer import transfer_plan, rom_transfer_plan
 
@@ -19,7 +19,7 @@ def register_folder(db, folder, device, system, destination, cache_root, *, look
     if destination not in profile.roots:
         raise ValueError('機種の転送先を確認してください')
     members = (system, *profile.siblings)
-    extensions = {e for m in members for e in system_profile(m).transfer_extensions}
+    extensions = {e for m in members for e in system_profile(m).extensions}
     paths, names, duplicates = [], set(), []
     for current, dirs, files in os.walk(folder):
         if cancelled():
@@ -27,7 +27,7 @@ def register_folder(db, folder, device, system, destination, cache_root, *, look
         dirs[:] = sorted(d for d in dirs if d.casefold() != 'media' and not d.startswith('.'))
         for filename in sorted(files):
             path = Path(current) / filename
-            if path.suffix.lower() in (*extensions, '.zip'):
+            if path.suffix.lower() in extensions:
                 if filename.casefold() in names:
                     duplicates.append(filename)
                 else:

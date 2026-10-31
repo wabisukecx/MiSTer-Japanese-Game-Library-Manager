@@ -68,7 +68,7 @@ IPはConsole Modeの「Home → Settings → Sound & Connectivity → Network」
 | CLIからScreenScraper APIへ直接接続 | 開発者認証とユーザー認証 | CLIの対話入力または環境変数 |
 
 通常のGUI手順では上の2つを使います。CLIのAPI直接連携は任意の別機能です。[API直接連携](screenscraper.md)
-日本語名の自動照合はRetronian GameDBを利用し、Skraperのログインとは別に動作します。
+日本語名の自動照合は、機種に応じてRetronian GameDB、Redump Local Names、GameDataBase by PigSaintを利用します。[機種別の取得元](data.md#日本語名データ)を参照してください。Skraperのログインとは別に動作します。
 
 ## 5. ROMと画像取得先を設定する
 
@@ -76,6 +76,8 @@ IPはConsole Modeの「Home → Settings → Sound & Connectivity → Network」
 2. Skraperで対象機種を追加し、Games/Roms folderにそのROMフォルダーを指定します。
 3. 画像取得対象をパッケージ正面（BOX 2D）にし、PNG形式の出力先を確認します。日本版を使う場合は地域を日本に設定します。
 4. 少数のROMで取得を試し、ROMと同じ基本名のPNGが出力されることを確認します。
+
+ネオジオの `.neo` は、SkraperのNeo Geoの対象拡張子に追加してください。この設定で画像取得と、MiSTerへの転送後の実機プレイまで確認済みです。
 
 ゲームボーイとゲームボーイカラーは、本ツールには同じPCフォルダーから登録できますが、Skraperの設定・画像取り込み・転送はそれぞれの機種で行います。
 本ツールは画像のファイル名でROMと対応付けます。同名の画像が複数ある場合は、取り込む出力先を整理します。

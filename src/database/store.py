@@ -28,6 +28,9 @@ class Store:
             UNIQUE(system,alias,japanese_title,source));
         CREATE TABLE IF NOT EXISTS match_candidates (
             id INTEGER PRIMARY KEY, game_id INTEGER REFERENCES games(id), payload TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS title_decisions (
+            id INTEGER PRIMARY KEY, game_id INTEGER NOT NULL REFERENCES games(id), payload TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS title_decisions_game ON title_decisions(game_id);
         CREATE TABLE IF NOT EXISTS artworks (
             id INTEGER PRIMARY KEY, game_id INTEGER REFERENCES games(id), source TEXT NOT NULL,
             region TEXT NOT NULL, url TEXT NOT NULL, local_path TEXT NOT NULL, sha256 TEXT NOT NULL,
@@ -121,7 +124,7 @@ class Store:
         root = remote_root or profile.root
         source = Path(path).resolve(strict=True)
         if (root not in profile.roots or not source.is_file()
-                or source.suffix.lower() not in (*profile.transfer_extensions, '.zip')
+                or source.suffix.lower() not in profile.extensions
                 or any(ord(c) < 32 for c in source.name) or '\\' in source.name):
             raise ValueError('機種・ROMファイル・転送先を確認してください')
         info = rom_info(source, system)
@@ -148,10 +151,12 @@ class Store:
             if str(path.parent) != folder or path.stem.casefold() != stem or path.suffix.lower() == '.zip':
                 continue
             with self.db:
+                self.db.execute('UPDATE title_decisions SET game_id=? WHERE game_id=?', (game_id, old['id']))
                 self.db.execute('UPDATE OR IGNORE artworks SET game_id=? WHERE game_id=?', (game_id, old['id']))
                 if new['match_status'] != 'confirmed' and old['match_status'] == 'confirmed':
                     self.db.execute("UPDATE games SET japanese_title=?,match_status='confirmed' WHERE id=?",
                                     (old['japanese_title'], game_id))
+                    self.record_title_decision(game_id, 'adopted', None, old['japanese_title'])
                 if not new['artwork_path'] and old['artwork_path']:
                     self.db.execute('UPDATE games SET artwork_source=?,artwork_region=?,artwork_path=? WHERE id=?',
                                     (old['artwork_source'], old['artwork_region'], old['artwork_path'], game_id))
@@ -164,12 +169,13 @@ class Store:
             new = self.game(game_id)
 
     def confirm(self, game_id, title):
-        self.game(game_id)
+        game = self.game(game_id)
         if not title.strip() or any(ord(c) < 32 for c in title):
             raise ValueError('Title must be nonempty and contain no control characters')
         with self.db:
             self.db.execute("UPDATE games SET japanese_title=?,match_status='confirmed' WHERE id=?",
                             (title, game_id))
+            self.record_title_decision(game_id, 'confirmed', game['japanese_title'], title)
 
     def unconfirm(self, game_id):
         """Drop a confirmation so the next match can propose titles again; candidates are kept."""
@@ -179,6 +185,7 @@ class Store:
         with self.db:
             self.db.execute('UPDATE games SET japanese_title=NULL,match_status=? WHERE id=?',
                             ('review' if has_candidates else 'unmatched', game['id']))
+            self.record_title_decision(game_id, 'unconfirmed', game['japanese_title'], None)
 
     def update_confirmed_title(self, game_id, expected, title):
         """Replace a confirmed title only if it is still the one the user reviewed."""
@@ -187,7 +194,22 @@ class Store:
         with self.db:
             changed = self.db.execute("""UPDATE games SET japanese_title=? WHERE id=? AND match_status='confirmed'
                 AND japanese_title IS ?""", (title, game_id, expected)).rowcount
+            if changed:
+                self.record_title_decision(game_id, 'updated', expected, title)
         return bool(changed)
+
+    def record_title_decision(self, game_id, action, previous_title, title):
+        """Append inside the caller's transaction so a failed approval also rolls back its history."""
+        from datetime import datetime, timezone
+        from uuid import uuid4
+        payload = dict(id=str(uuid4()), action=action, previous_title=previous_title, title=title,
+            recorded_at=datetime.now(timezone.utc).isoformat(), evidence=self.get_candidates(game_id))
+        self.db.execute('INSERT INTO title_decisions(game_id,payload) VALUES (?,?)',
+                        (game_id, json.dumps(payload, ensure_ascii=False)))
+
+    def title_decisions(self, game_id):
+        return [json.loads(row[0]) for row in self.db.execute(
+            'SELECT payload FROM title_decisions WHERE game_id=? ORDER BY id', (game_id,))]
 
     def delete_aliases(self, source):
         with self.db:
