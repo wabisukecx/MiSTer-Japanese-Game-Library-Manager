@@ -10,7 +10,7 @@ mister-jp-library <command> --help
 DBの既定値は `work/library.sqlite3` です。`--db` はサブコマンドより前に指定します。
 相対パスは実行時の作業ディレクトリを基準に解決します。
 `--system` は機種IDで指定します。例ではファミコンのID `NES` を使います。日本語の機種名との対応は[対応機種](systems.md)を参照してください。
-ライブラリ分割と `--device` オプションは廃止しました。旧形式のinventory JSONに含まれる `device` は無視します。既存DBは[旧バージョンからの移行](gui.md#旧バージョンからの移行)に従って自動統合します。
+inventory JSONに含まれる `device` は無視します。
 
 ## ROMの登録と一覧
 

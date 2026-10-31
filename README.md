@@ -49,7 +49,7 @@ python -m venv .venv
 .\.venv\Scripts\mister-jp-library.exe gui
 ```
 
-CLIのみの場合は `pip install -e .` とします。既存の環境でソース構成を更新した場合も、同じインストールコマンドを再実行してください。
+CLIのみの場合は `pip install -e .` とします。
 
 ```powershell
 .\.venv\Scripts\mister-jp-library.exe --help
