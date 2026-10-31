@@ -47,7 +47,7 @@ workflow.register_folderはGUIとCLIで共有します。workflow.batch_planは�
 | local_roms | 外部ROMの絶対パス、ZIP内部メンバー名 |
 | title_aliases / match_candidates | 出典付き別名、名前候補と照合根拠 |
 | artworks / artwork_edits | 画像候補・ハッシュ、補正元・角度・元ハッシュ |
-| settings | GUIの表示範囲、機種別作業先、Skraperの場所 |
+| settings | GUIの表示範囲、機種別作業先、Skraperの場所、MiSTerの接続先（IP・ユーザー、任意でDPAPI暗号化したパスワード。database/credentials.py） |
 | sync_manifests | CLIのレビュー用JSON履歴 |
 
 名前はunmatched・review・confirmedの状態を持ちます。候補更新は確定名を変更しません。
@@ -58,13 +58,15 @@ games.sync_statusは実際の転送結果を追跡しません。転送の状態
 
 ## 名前照合
 
-Retronianは機種別にインデックスを作り、次の順で照合します。
+Retronian・Redump・GameDataBaseは、機種に対応するものがそれぞれ独立にインデックスを作って照合し、候補を統合します（metadata/titles.py）。
+Retronianは次の順で照合します。
 
 1. ROM内容のSHA-256（ZIPでは内部ROM）
 2. 地域・Revを含むROM基本名
 3. NFKC正規化・タグ除去後の名前
 
 上位で一致したら下位へ進みません。1と2はscore 1、3は0.8なので、score 1が必ず内容一致を意味するわけではありません。
+GameDataBaseはSHA-256一致を優先し、タイトル名だけの一致は0.8として扱います。RedumpはDAT名（score 1）と正規化名（0.8）で照合し、内容は比較しません。
 候補の出典・理由を保存し、確認してから確定します。ヘッダー除去などのROM内容の変換は行いません。
 
 ## 通信と公開

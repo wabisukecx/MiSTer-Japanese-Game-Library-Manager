@@ -85,18 +85,8 @@ def download(ftp, path):
     return bytes(data)
 
 
-def transfer_images(items, host, username, password, backup_root, *, cancelled=lambda: False,
-                    progress=lambda done, total: None, ftp_factory=ftplib.FTP, titles=None, roms=None,
-                    title_targets=None, verify_existing_roms=False):
-    """Back up existing media/aliases, then publish missing ROMs, images and aliases.
-
-    Original files remain both locally and in a unique remote backup directory.
-    Failure or cancellation restores published files in reverse order when possible.
-    Conflicting external changes are preserved and recorded for later recovery.
-    """
-    roms = roms or []
-    if not items and not titles and not roms:
-        raise ValueError('転送する画像・日本語名がありません')
+def check_targets(items, roms):
+    """Validate that every destination belongs to one system folder; return (media dir, ROM roots)."""
     media_dirs = {str(PurePosixPath(i['remote_path']).parent) for i in items}
     if len(media_dirs) > 1 or not media_dirs.issubset({m for s in SYSTEMS.values() for m in s.media_dirs}):
         raise ValueError('対応する1機種のmediaフォルダーだけを指定してください')
@@ -111,52 +101,67 @@ def transfer_images(items, host, username, password, backup_root, *, cancelled=l
         raise ValueError('転送先は1機種の同じフォルダーにしてください')
     if len({r['remote_path'] for r in roms}) != len(roms):
         raise ValueError('ROMの転送先が重複しています')
-    run_id = uuid.uuid4().hex
-    folder = Path(backup_root) / run_id
-    folder.mkdir(parents=True, exist_ok=False)
-    journal = dict(schema='mister-jp-transfer/v2', run_id=run_id,
-                   host=host, media=media, status='preflight', items=[], titles=titles or {}, skipped_roms=[])
-    report = folder / 'transfer.json'
-    def save():
-        tmp = folder / 'transfer.json.tmp'
-        tmp.write_text(json.dumps(journal, ensure_ascii=False, indent=2), encoding='utf-8')
-        tmp.replace(report)
-    save()
-    def result(**extra):
-        verified = [r for r in journal['items'] if r['status'] == 'verified']
+    return media, roots
+
+
+class _Transfer:
+    """One transfer run. Phases append journal rows and payloads in the order they are published."""
+
+    def __init__(self, ftp, journal, folder, run_id, cancelled, titles):
+        self.ftp, self.journal, self.folder, self.run_id = ftp, journal, folder, run_id
+        self.cancelled, self.titles = cancelled, titles
+        self.report = folder / 'transfer.json'
+        self.payloads = []
+        self.allowed = None
+        self.save()
+
+    def save(self):
+        tmp = self.folder / 'transfer.json.tmp'
+        tmp.write_text(json.dumps(self.journal, ensure_ascii=False, indent=2), encoding='utf-8')
+        tmp.replace(self.report)
+
+    def check_cancelled(self):
+        if self.cancelled():
+            raise InterruptedError()
+
+    def result(self, **extra):
+        verified = [r for r in self.journal['items'] if r['status'] == 'verified']
         return dict(transferred=sum(r['kind'] == 'image' for r in verified),
                     roms_transferred=sum(r['kind'] == 'rom' for r in verified),
-                    roms_skipped=len(journal['skipped_roms']),
-                    titles_transferred=len(titles or {}) if any(r['kind'] == 'titles' for r in verified) else 0,
-                    report=str(report.resolve()), **extra)
-    ftp = ftp_factory()
-    try:
-        ftp.encoding = 'utf-8'
-        ftp.connect(host, 21, timeout=20)
-        ftp.login(username, password)
-        password = None
-        if cancelled():
-            raise InterruptedError()
-        # Resolve title settings/font before touching either kind of destination.
-        if titles:
-            allowed = title_targets if title_targets is not None else [
-                i['rom_path'] for i in items if i.get('rom_path')] + [r['remote_path'] for r in roms]
-            check_alias_collisions(ftp, titles, allowed, cancelled=cancelled)
-        title_update = prepare_title_update(ftp, titles) if titles else None
-        payloads = []
-        root = next(iter(roots), str(PurePosixPath(media).parent) if media else None)
-        root_listing = dict(ftp.mlsd(root)) if root else {}
+                    roms_skipped=len(self.journal['skipped_roms']),
+                    titles_transferred=len(self.titles or {}) if any(r['kind'] == 'titles' for r in verified) else 0,
+                    report=str(self.report.resolve()), **extra)
+
+    def connect(self, host, username, password):
+        self.ftp.encoding = 'utf-8'
+        self.ftp.connect(host, 21, timeout=20)
+        self.ftp.login(username, password)
+        self.check_cancelled()
+
+    def prepare_titles(self, items, roms, title_targets):
+        """Resolve title settings/font before touching either kind of destination."""
+        if not self.titles:
+            return None
+        self.allowed = title_targets if title_targets is not None else [
+            i['rom_path'] for i in items if i.get('rom_path')] + [r['remote_path'] for r in roms]
+        check_alias_collisions(self.ftp, self.titles, self.allowed, cancelled=self.cancelled)
+        return prepare_title_update(self.ftp, self.titles)
+
+    def list_destinations(self, items, media, root):
+        root_listing = dict(self.ftp.mlsd(root)) if root else {}
         create_media = bool(items and 'media' not in root_listing)
         if items and not create_media and root_listing['media'].get('type') != 'dir':
             raise ValueError('mediaがフォルダーではありません')
-        listing = dict(ftp.mlsd(media)) if items and not create_media else {}
+        listing = dict(self.ftp.mlsd(media)) if items and not create_media else {}
+        return root_listing, create_media, listing
+
+    def stage_roms(self, roms, root_listing, verify_existing_roms):
+        """Skip ROMs already on the device (optionally comparing content); queue the missing ones."""
         for item in roms:
-            if cancelled():
-                raise InterruptedError()
+            self.check_cancelled()
             target = PurePosixPath(item['remote_path'])
             existing_name = next((name for name in root_listing if name.casefold() == target.name.casefold()), None)
-            facts = next((facts for name, facts in root_listing.items()
-                          if name.casefold() == target.name.casefold()), None)
+            facts = root_listing.get(existing_name)
             if facts:
                 if facts.get('type') != 'file':
                     raise ValueError('ROMの転送先が通常ファイルではありません')
@@ -166,12 +171,12 @@ def transfer_images(items, host, username, password, backup_root, *, cancelled=l
                             raise ValueError('確認後にPCのROMが変更されました')
                     existing_path = str(target.parent / existing_name)
                     try:
-                        equal = remote_rom_digest(ftp, existing_path, item['size']) == item['sha256']
+                        equal = remote_rom_digest(self.ftp, existing_path, item['size']) == item['sha256']
                     except ValueError:
                         equal = False
                     if not equal:
                         raise ValueError('既存ROMの内容がPCと一致しません: ' + existing_name)
-                journal['skipped_roms'].append(str(target))
+                self.journal['skipped_roms'].append(str(target))
                 continue
             source = Path(item['local_path'])
             info = rom_info(source, item['system'], item.get('archive_member'))
@@ -179,13 +184,14 @@ def transfer_images(items, host, username, password, backup_root, *, cancelled=l
                 sha = stream_sha256(stream)
             if sha != item['sha256'] or info['size'] != item['size']:
                 raise ValueError('確認後にPCのROMが変更されました')
-            journal['items'].append(dict(item, kind='rom', original_existed=False, status='ready'))
-            payloads.append(source)
-        save()
-        # All originals must be backed up before any upload or rename.
+            self.journal['items'].append(dict(item, kind='rom', original_existed=False, status='ready'))
+            self.payloads.append(source)
+        self.save()
+
+    def backup_images(self, items, media, listing):
+        """All originals must be backed up before any upload or rename."""
         for item in items:
-            if cancelled():
-                raise InterruptedError()
+            self.check_cancelled()
             target = PurePosixPath(item['remote_path'])
             if str(target.parent) != media or target.suffix != '.png' or any(ord(c) < 32 for c in str(target)):
                 raise ValueError('転送先が許可されたPNGではありません')
@@ -198,95 +204,134 @@ def transfer_images(items, host, username, password, backup_root, *, cancelled=l
             facts = listing.get(target.name)
             if facts and facts.get('type') != 'file':
                 raise ValueError('画像の転送先が通常ファイルではありません: ' + target.name)
-            original = download(ftp, str(target)) if facts else b''
-            backup = folder / target.name
+            original = download(self.ftp, str(target)) if facts else b''
+            backup = self.folder / target.name
             backup.write_bytes(original)
             if digest(backup.read_bytes()) != digest(original):
                 raise OSError('バックアップの照合に失敗しました')
-            remote_backup = media + '/.mister-jp-backup-' + run_id + '/' + target.name
-            row = dict(item, kind='image', original_existed=bool(facts),
-                       backup=str(backup.resolve()), original_sha256=digest(original),
-                       remote_backup=remote_backup, status='backed_up')
-            journal['items'].append(row)
-            payloads.append(data)
-            save()
-        if title_update:
-            original, data = title_update['original'], title_update['data']
-            target = title_update['remote_path']
-            backup = folder / 'alias-original.txt'
-            backup.write_bytes(original)
-            (folder / 'alias-upload.txt').write_bytes(data)
-            if backup.read_bytes() != original:
-                raise OSError('別名バックアップの照合に失敗しました')
-            journal['items'].append(dict(kind='titles', remote_path=target,
-                original_existed=title_update['original_existed'], backup=str(backup.resolve()),
-                original_sha256=digest(original), sha256=digest(data),
-                remote_backup=target + '.mister-jp-' + run_id + '.bak', status='backed_up'))
-            payloads.append(data)
-            save()
-        if cancelled():
-            raise InterruptedError()
+            self.journal['items'].append(dict(
+                item, kind='image', original_existed=bool(facts),
+                backup=str(backup.resolve()), original_sha256=digest(original),
+                remote_backup=media + '/.mister-jp-backup-' + self.run_id + '/' + target.name, status='backed_up'))
+            self.payloads.append(data)
+            self.save()
+
+    def backup_titles(self, title_update):
+        original, data = title_update['original'], title_update['data']
+        target = title_update['remote_path']
+        backup = self.folder / 'alias-original.txt'
+        backup.write_bytes(original)
+        (self.folder / 'alias-upload.txt').write_bytes(data)
+        if backup.read_bytes() != original:
+            raise OSError('別名バックアップの照合に失敗しました')
+        self.journal['items'].append(dict(kind='titles', remote_path=target,
+            original_existed=title_update['original_existed'], backup=str(backup.resolve()),
+            original_sha256=digest(original), sha256=digest(data),
+            remote_backup=target + '.mister-jp-' + self.run_id + '.bak', status='backed_up'))
+        self.payloads.append(data)
+        self.save()
+
+    def prepare_remote(self, media, create_media):
         if create_media:
-            ftp.mkd(media)
-        if any(r['kind'] == 'image' and r['original_existed'] for r in journal['items']):
-            ftp.mkd(media + '/.mister-jp-backup-' + run_id)
-        for index, (row, data) in enumerate(zip(journal['items'], payloads)):
-            if cancelled():
-                raise InterruptedError()
+            self.ftp.mkd(media)
+        if any(r['kind'] == 'image' and r['original_existed'] for r in self.journal['items']):
+            self.ftp.mkd(media + '/.mister-jp-backup-' + self.run_id)
+
+    def check_original(self, row):
+        """Catch external changes since backup; never move an unbacked-up file."""
+        target = row['remote_path']
+        if row['kind'] == 'titles':
+            check_alias_collisions(self.ftp, self.titles, self.allowed, cancelled=self.cancelled)
+        if row['original_existed']:
+            if digest(download(self.ftp, target)) != row['original_sha256']:
+                raise ValueError('バックアップ後に実機のファイルが変更されました')
+        elif PurePosixPath(target).name.casefold() in {
+                name.casefold() for name, _ in self.ftp.mlsd(str(PurePosixPath(target).parent))}:
+            raise ValueError('転送先に別のファイルが作成されました')
+
+    def publish(self, progress):
+        """Stage, verify, swap and re-verify each file in order."""
+        for index, (row, data) in enumerate(zip(self.journal['items'], self.payloads)):
+            self.check_cancelled()
             target = row['remote_path']
-            temp = str(PurePosixPath(target).parent) + '/.mister-jp-' + run_id + '-' + str(index) + '.tmp'
+            temp = str(PurePosixPath(target).parent) + '/.mister-jp-' + self.run_id + '-' + str(index) + '.tmp'
             row.update(temp_path=temp, status='staging')
-            save()
-            # Catch external changes since backup; never move an unbacked-up file.
-            def check_original():
-                if row['kind'] == 'titles':
-                    check_alias_collisions(ftp, titles, allowed, cancelled=cancelled)
-                if row['original_existed']:
-                    if digest(download(ftp, target)) != row['original_sha256']:
-                        raise ValueError('バックアップ後に実機のファイルが変更されました')
-                elif PurePosixPath(target).name.casefold() in {
-                        name.casefold() for name, _ in ftp.mlsd(str(PurePosixPath(target).parent))}:
-                    raise ValueError('転送先に別のファイルが作成されました')
-            check_original()
+            self.save()
+            self.check_original(row)
             if row['kind'] == 'rom':
                 with open_rom(data, row['system'], row.get('archive_member'), raw=True) as stream:
-                    ftp.storbinary('STOR ' + temp, stream)
-                staged_sha = remote_rom_digest(ftp, temp, row['size'])
+                    self.ftp.storbinary('STOR ' + temp, stream)
+                staged_sha = remote_rom_digest(self.ftp, temp, row['size'])
             else:
-                ftp.storbinary('STOR ' + temp, io.BytesIO(data))
-                staged_sha = digest(download(ftp, temp))
+                self.ftp.storbinary('STOR ' + temp, io.BytesIO(data))
+                staged_sha = digest(download(self.ftp, temp))
             if staged_sha != row['sha256']:
                 raise ValueError('一時転送ファイルの照合に失敗しました')
-            check_original()
+            self.check_original(row)
             row['status'] = 'moving_original'
-            save()
+            self.save()
             if row['original_existed']:
-                ftp.rename(target, row['remote_backup'])
+                self.ftp.rename(target, row['remote_backup'])
             row['status'] = 'publishing'
-            save()
-            ftp.rename(temp, target)
-            final_sha = (remote_rom_digest(ftp, target, row['size']) if row['kind'] == 'rom'
-                         else digest(download(ftp, target)))
+            self.save()
+            self.ftp.rename(temp, target)
+            final_sha = (remote_rom_digest(self.ftp, target, row['size']) if row['kind'] == 'rom'
+                         else digest(download(self.ftp, target)))
             if final_sha != row['sha256']:
                 # Keep the published file for diagnosis; preserve the original backup.
                 raise ValueError('転送後の画像照合に失敗しました')
             row['status'] = 'verified'
-            save()
-            progress(index + 1, len(payloads))
+            self.save()
+            progress(index + 1, len(self.payloads))
+
+
+def transfer_images(items, host, username, password, backup_root, *, cancelled=lambda: False,
+                    progress=lambda done, total: None, ftp_factory=ftplib.FTP, titles=None, roms=None,
+                    title_targets=None, verify_existing_roms=False):
+    """Back up existing media/aliases, then publish missing ROMs, images and aliases.
+
+    Original files remain both locally and in a unique remote backup directory.
+    Failure or cancellation restores published files in reverse order when possible.
+    Conflicting external changes are preserved and recorded for later recovery.
+    """
+    roms = roms or []
+    if not items and not titles and not roms:
+        raise ValueError('転送する画像・日本語名がありません')
+    media, roots = check_targets(items, roms)
+    run_id = uuid.uuid4().hex
+    folder = Path(backup_root) / run_id
+    folder.mkdir(parents=True, exist_ok=False)
+    journal = dict(schema='mister-jp-transfer/v2', run_id=run_id,
+                   host=host, media=media, status='preflight', items=[], titles=titles or {}, skipped_roms=[])
+    ftp = ftp_factory()
+    run = _Transfer(ftp, journal, folder, run_id, cancelled, titles)
+    try:
+        run.connect(host, username, password)
+        password = None
+        title_update = run.prepare_titles(items, roms, title_targets)
+        root = next(iter(roots), str(PurePosixPath(media).parent) if media else None)
+        root_listing, create_media, listing = run.list_destinations(items, media, root)
+        run.stage_roms(roms, root_listing, verify_existing_roms)
+        run.backup_images(items, media, listing)
+        if title_update:
+            run.backup_titles(title_update)
+        run.check_cancelled()
+        run.prepare_remote(media, create_media)
+        run.publish(progress)
         journal['status'] = 'verified'
-        save()
-        return result()
+        run.save()
+        return run.result()
     except InterruptedError:
         journal['outcome'] = 'cancelled'
-        restored = rollback(ftp, journal, save)
-        return result(cancelled=True, rolled_back=restored)
+        restored = rollback(ftp, journal, run.save)
+        return run.result(cancelled=True, rolled_back=restored)
     except Exception as error:
         journal['outcome'] = 'failed'
         # Only locally generated validation messages are safe to show to users.
         reason = str(error) if type(error) is ValueError else ''
-        restored = rollback(ftp, journal, save)
+        restored = rollback(ftp, journal, run.save)
         # Do not expose server responses or authentication data.
         state = '反映済みファイルを元に戻しました。' if restored else '自動復旧が未完了です。転送記録から復旧してください。'
-        raise RuntimeError('転送を停止しました。' + reason + ' ' + state + ' 復旧記録: ' + str(report.resolve())) from None
+        raise RuntimeError('転送を停止しました。' + reason + ' ' + state + ' 復旧記録: ' + str(run.report.resolve())) from None
     finally:
         ftp.close()

@@ -4,9 +4,9 @@ class SpecificationUnverified(RuntimeError):
 
 
 BLOCKERS = [
-    'general export across systems and directory layouts unverified; NES GUI transfers are separate',
+    'the generic export command is disabled; use the GUI batch transfer (ROMs, images and aliases) or recover-transfer',
     'Japanese title rendering verified only on home-mister Console Mode v1.2.3 with the installed CJK font',
-    'general artwork dimensions and cache invalidation unverified; four NES image replacements verified',
+    'real-device verification covers NES, SNES, MD, GB, GBC, GBA, PCE and NEOGEO only; other systems are untested',
 ]
 
 
