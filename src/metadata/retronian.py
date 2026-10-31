@@ -141,39 +141,3 @@ def catalog_fetched_at(system, cache_root):
         return float(value)
     except (OSError, ValueError, KeyError, TypeError):
         return None
-
-
-def match_titles(db, games, cache_root, *, refresh=False, cancelled=lambda: False,
-                 progress=lambda done, total: None, loader=load_catalog, recheck_confirmed=False):
-    """Refresh candidates. With recheck_confirmed, confirmed titles are only compared, never changed:
-    differing single-candidate proposals are returned in result['updates'] for explicit approval."""
-    catalogs, modes = {}, {}
-    for system in sorted({g['system'] for g in games}):
-        catalogs[system], modes[system] = loader(system, cache_root, refresh=refresh, cancelled=cancelled)
-    indexes = {system: build_index(rows) for system, rows in catalogs.items()}
-    result = dict(matched=0, ambiguous=0, missing=0, confirmed=0, modes=modes, updates=[],
-                  fetched_at={system: catalog_fetched_at(system, cache_root) for system in catalogs})
-    for index, game in enumerate(games):
-        if cancelled():
-            raise InterruptedError('日本語名の照合を中断しました。照合済み候補は保持されます。')
-        current = db.game(game['id'])
-        if current['match_status'] == 'confirmed':
-            result['confirmed'] += 1
-            if recheck_confirmed:
-                fresh = title_candidates(game, catalogs[game['system']], cancelled=cancelled,
-                                         index=indexes[game['system']])
-                previous = [c for c in db.get_candidates(game['id']) if c.get('provider') != 'retronian']
-                db.save_candidates(game['id'], previous + fresh)
-                names = list(dict.fromkeys(c['japanese_title'] for c in fresh if c.get('score') == 1))
-                if len(names) == 1 and names[0] != current['japanese_title']:
-                    result['updates'].append(dict(game_id=game['id'], rom_filename=game['rom_filename'],
-                                                  current=current['japanese_title'], proposed=names[0]))
-        else:
-            candidates = title_candidates(game, catalogs[game['system']], cancelled=cancelled,
-                                          index=indexes[game['system']])
-            previous = [c for c in db.get_candidates(game['id']) if c.get('provider') != 'retronian']
-            db.save_candidates(game['id'], previous + candidates)
-            result['matched' if candidates else 'missing'] += 1
-            result['ambiguous'] += len({c['japanese_title'] for c in previous + candidates}) > 1
-        progress(index + 1, len(games))
-    return result

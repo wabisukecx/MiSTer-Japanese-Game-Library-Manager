@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from database.store import Store
-from metadata.retronian import match_titles
+from test_retronian import match_titles
 from artwork.skraper_import import plan_import, apply_import
 from metadata.approval import approval_plan, apply_approval
 from consolemode.titles import title_mapping

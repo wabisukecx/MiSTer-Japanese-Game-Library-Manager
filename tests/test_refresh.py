@@ -4,7 +4,7 @@ import unittest
 
 from database.store import Store
 from metadata.approval import approval_plan
-from metadata.retronian import match_titles
+from test_retronian import match_titles
 from test_retronian import record
 
 

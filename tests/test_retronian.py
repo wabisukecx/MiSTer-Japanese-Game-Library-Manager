@@ -3,10 +3,21 @@ import io
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 from database.store import Store
-from metadata.retronian import load_catalog, title_candidates, match_titles
+from metadata import retronian
+from metadata.retronian import load_catalog, title_candidates
+from metadata.titles import match_titles as match_all
+
+
+def match_titles(db, games, cache_root, *, loader=load_catalog, **options):
+    """Run the shared matcher with Retronian only, loading its catalog through `loader`."""
+    provider = SimpleNamespace(PLATFORMS=retronian.PLATFORMS, load_catalog=loader,
+        build_index=retronian.build_index, title_candidates=retronian.title_candidates,
+        catalog_fetched_at=retronian.catalog_fetched_at)
+    return match_all(db, games, cache_root, providers=(('retronian', provider, cache_root),), **options)
 
 
 def record(name='Game (Japan)', title='ゲーム', **rom):

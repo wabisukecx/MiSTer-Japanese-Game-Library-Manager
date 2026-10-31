@@ -89,7 +89,7 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 self.assertFalse(window.transfer_button.isEnabled())
-                with patch('gui.app.QMessageBox.information'), patch.object(TransferDialog, 'exec') as dialog:
+                with patch('PyQt6.QtWidgets.QMessageBox.information'), patch.object(TransferDialog, 'exec') as dialog:
                     window.choose_transfer()
                 dialog.assert_not_called()
             finally:
@@ -135,8 +135,8 @@ class GUITests(unittest.TestCase):
                     return dict(transferred=0, titles_transferred=1, roms_transferred=2, roms_skipped=0, report='test-report')
                 with patch.object(TransferDialog, 'exec', return_value=QDialog.DialogCode.Rejected):
                     window.choose_transfer()
-                with patch.object(TransferDialog, 'exec', inspect), patch('gui.app.transfer_images', side_effect=transfer), \
-                        patch('gui.app.QMessageBox.information'):
+                with patch.object(TransferDialog, 'exec', inspect), patch('gui.transfer_flow.transfer_images', side_effect=transfer), \
+                        patch('PyQt6.QtWidgets.QMessageBox.information'):
                     window.choose_transfer()
                     self.wait_idle(window)
                 self.assertEqual(transferred, [True])
@@ -299,7 +299,7 @@ class GUITests(unittest.TestCase):
                         combo.setCurrentIndex(index)
                         self.assertEqual(combo.currentData(), system)
                     return QDialog.DialogCode.Rejected
-                with patch('gui.app.QDialog.exec', new=inspect):
+                with patch('PyQt6.QtWidgets.QDialog.exec', new=inspect):
                     window.choose_local_roms()
             finally:
                 window.close()
@@ -383,7 +383,7 @@ class GUITests(unittest.TestCase):
                 self.wait_idle(window)
                 window.system.setCurrentIndex(window.system.findData('SNES'))
                 with patch.object(SkraperDialog, 'exec', return_value=QDialog.DialogCode.Accepted), patch(
-                        'gui.app.plan_import', return_value=dict(ready_count=0, items=[])) as plan, patch.object(
+                        'gui.import_flow.plan_import', return_value=dict(ready_count=0, items=[])) as plan, patch.object(
                         window, 'open_import_dialog'):
                     window.choose_skraper()
                     self.wait_idle(window)
@@ -456,7 +456,7 @@ class GUITests(unittest.TestCase):
                     self.assertFalse(hasattr(window, 'device'))
                     dialog.findChild(QCheckBox).setChecked(False)
                     return QDialog.DialogCode.Accepted
-                with patch.object(QDialog, 'exec', accept), patch('gui.app.QMessageBox.warning') as warning:
+                with patch.object(QDialog, 'exec', accept), patch('PyQt6.QtWidgets.QMessageBox.warning') as warning:
                     window.choose_local_roms()
                     self.wait_idle(window)
                     warning.assert_not_called()
@@ -494,12 +494,12 @@ class GUITests(unittest.TestCase):
                     field = dialog.findChild(QLineEdit, 'romFolder')
                     self.assertEqual(field.text(), str(window.rom_folders['SNES']))
                     # The browse button fills the visible path field.
-                    with patch('gui.app.QFileDialog.getExistingDirectory', return_value=tmp):
+                    with patch('PyQt6.QtWidgets.QFileDialog.getExistingDirectory', return_value=tmp):
                         next(b for b in dialog.findChildren(QPushButton) if b.text() == '参照').click()
                     self.assertEqual(field.text(), tmp)
                     return QDialog.DialogCode.Accepted
-                with patch('gui.app.QDialog.exec', new=fill_folder), patch(
-                        'gui.app.match_titles', return_value=dict(
+                with patch('PyQt6.QtWidgets.QDialog.exec', new=fill_folder), patch(
+                        'gui.import_flow.match_titles', return_value=dict(
                             matched=0, ambiguous=0, missing=1, confirmed=0, modes={})) as lookup:
                     window.choose_local_roms()
                     self.wait_idle(window)
@@ -539,8 +539,8 @@ class GUITests(unittest.TestCase):
                     self.assertTrue(dialog.submit.isEnabled())
                     return QDialog.DialogCode.Accepted
                 with patch.object(TransferDialog, 'exec', accept), patch(
-                        'gui.app.transfer_images', side_effect=transfer), patch(
-                        'gui.app.QMessageBox.information'):
+                        'gui.transfer_flow.transfer_images', side_effect=transfer), patch(
+                        'PyQt6.QtWidgets.QMessageBox.information'):
                     window.model.set_checks([g['id'] for g in window.visible_games()], True)
                     window.choose_transfer()
                     self.wait_idle(window)
@@ -581,7 +581,7 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 window.system.setCurrentIndex(window.system.findData('SNES'))
-                with patch('gui.app.QDialog.exec', new=fill):
+                with patch('PyQt6.QtWidgets.QDialog.exec', new=fill):
                     window.choose_local_roms()
                     self.wait_idle(window)
                 db = Store(path)
@@ -614,8 +614,8 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 window.system.setCurrentIndex(window.system.findData('GB'))
-                with patch('gui.app.QDialog.exec', new=fill), patch(
-                        'gui.app.match_titles', return_value=dict(
+                with patch('PyQt6.QtWidgets.QDialog.exec', new=fill), patch(
+                        'gui.import_flow.match_titles', return_value=dict(
                             matched=0, ambiguous=0, missing=0, confirmed=0, modes={})):
                     window.choose_local_roms()
                     self.wait_idle(window)
@@ -717,7 +717,7 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 window.model.set_checks([ids[0]], True)
-                with patch.object(TransferDialog, 'exec', accept), patch('gui.app.transfer_images', side_effect=transfer), patch('gui.app.QMessageBox.information'):
+                with patch.object(TransferDialog, 'exec', accept), patch('gui.transfer_flow.transfer_images', side_effect=transfer), patch('PyQt6.QtWidgets.QMessageBox.information'):
                     window.choose_transfer()
                     self.wait_idle(window)
                 self.assertEqual(len(captured), 1)
@@ -770,7 +770,7 @@ class GUITests(unittest.TestCase):
                     self.assertEqual(folder.text(), str(external))
                     system.setCurrentIndex(system.findData('FDS'))
                     self.assertEqual(folder.text(), str(self.rom_root / 'FDS'))
-                    with patch('gui.app.QFileDialog.getExistingDirectory', return_value=str(external)):
+                    with patch('PyQt6.QtWidgets.QFileDialog.getExistingDirectory', return_value=str(external)):
                         next(b for b in dialog.findChildren(QPushButton) if b.text() == '参照').click()
                     self.assertEqual(folder.text(), str(external))
                     return QDialog.DialogCode.Rejected
@@ -1033,11 +1033,11 @@ class GUITests(unittest.TestCase):
                     self.assertEqual(fields[0].text(), 'test-host')
                     fields[-1].setText('secret')
                     return QDialog.DialogCode.Accepted
-                with patch('gui.app.QFileDialog.getOpenFileName', return_value=(str(report), '')), patch(
-                        'gui.app.QDialog.exec', new=accept), patch(
-                        'gui.app.recover_transfer', return_value=dict(
+                with patch('PyQt6.QtWidgets.QFileDialog.getOpenFileName', return_value=(str(report), '')), patch(
+                        'PyQt6.QtWidgets.QDialog.exec', new=accept), patch(
+                        'gui.transfer_flow.recover_transfer', return_value=dict(
                             recovered=True, report=str(report), status='rolled_back')) as recover, patch(
-                        'gui.app.QMessageBox.information'):
+                        'PyQt6.QtWidgets.QMessageBox.information'):
                     window.recovery_button.click()
                     self.wait_idle(window)
                 recover.assert_called_once_with(str(report), 'test-host', 'root', 'secret')

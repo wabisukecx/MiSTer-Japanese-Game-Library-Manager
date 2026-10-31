@@ -12,7 +12,7 @@ src/
 ├── workflow.py           登録・照合・転送計画の共通処理
 ├── local_rom.py          ROMとZIPの読み取り
 ├── systems.py            機種定義と転送先検査
-├── gui/                  PyQt6の画面とワーカー
+├── gui/                  PyQt6の画面（app=本体、transfer_flow/import_flow/detail_panel=操作別、tasks=ワーカー、library_model=一覧）
 ├── database/             SQLiteストア
 ├── metadata/             名前照合、一括承諾、出典付き日本語名DBの出力・マージ
 ├── artwork/              画像取得・取り込み・回転補正

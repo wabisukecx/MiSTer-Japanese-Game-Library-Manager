@@ -10,7 +10,8 @@ import zipfile
 
 from database.store import Store
 from local_rom import rom_info
-from metadata.retronian import PLATFORMS, load_catalog, match_titles
+from metadata.retronian import PLATFORMS, load_catalog
+from test_retronian import match_titles
 from systems import SYSTEMS, ROM_EXTENSIONS, system_profile, transfer_rom
 from workflow import register_folder, batch_plan
 
