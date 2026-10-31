@@ -24,7 +24,7 @@ class TitleCatalogTests(unittest.TestCase):
         self.addCleanup(self.db.close)
         self.rom = self.root / 'Game (Japan).nes'
         self.rom.write_bytes(b'rom')
-        self.ident = self.db.register_local_rom('private-device', 'NES', self.rom)
+        self.ident = self.db.register_local_rom('NES', self.rom)
         self.db.save_candidates(self.ident, [dict(japanese_title='ゲーム', score=1, provider='fixture',
             source='https://user:password@example.com/record?token=secret&id=1', license='CC BY 4.0',
             reason='ROM名一致', secret='do-not-export', local_path='private-path')])
@@ -79,7 +79,7 @@ class TitleCatalogTests(unittest.TestCase):
         zipped = self.root / 'Zipped.zip'
         with zipfile.ZipFile(zipped, 'w') as archive:
             archive.writestr('Inner.nes', b'rom')
-        other = self.db.register_local_rom('private-device', 'NES', zipped)
+        other = self.db.register_local_rom('NES', zipped)
         self.db.confirm(self.ident, 'ゲーム Ａ')
         self.db.confirm(other, 'ｹﾞｰﾑA')
         document = export_catalog(self.db, self.db.games(), hash_roms=True)

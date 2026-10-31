@@ -55,7 +55,6 @@ def parser():
     scan = commands.add_parser('scan', help='list ROMs via FTP; never download ROMs')
     scan.add_argument('--host', required=True)
     scan.add_argument('--user', default='root')
-    scan.add_argument('--device', required=True, help='stable logical device name')
     scan.add_argument('--port', type=int, default=21)
     scan.add_argument('--timeout', type=float, default=15)
     scan.add_argument('--system', choices=SYSTEMS, default='NES')
@@ -73,9 +72,7 @@ def parser():
     aliases = commands.add_parser('import-aliases', help='import attributed title aliases JSON')
     aliases.add_argument('path')
     match = commands.add_parser('match', help='persist automatic candidates without confirming')
-    match.add_argument('--device')
     listing = commands.add_parser('list', help='show titles and candidate evidence')
-    listing.add_argument('--device')
     listing.add_argument('--pending', action='store_true')
     confirm = commands.add_parser('confirm', help='explicitly confirm a Japanese title locally')
     confirm.add_argument('game_id', type=int)
@@ -106,12 +103,10 @@ def parser():
         command.add_argument('--timeout', type=float, default=20)
         command.add_argument('--no-prompt', action='store_true', help='require credentials from environment')
     plan = commands.add_parser('preview', help='write blocked review manifest; not a transfer plan')
-    plan.add_argument('--device')
     plan.add_argument('--out', required=True)
     commands.add_parser('export', help='report why Console Mode export is blocked')
     titles = commands.add_parser('export-title-db', help='write a portable attributed Japanese title database JSON')
     titles.add_argument('--out', required=True, help='new output JSON; existing files are never overwritten')
-    titles.add_argument('--device')
     titles.add_argument('--system', choices=SYSTEMS)
     titles.add_argument('--confirmed-only', action='store_true')
     titles.add_argument('--hash-roms', action='store_true', help='read registered local ROMs to compute SHA-256')
@@ -121,7 +116,6 @@ def parser():
     commands.add_parser('gui', help='open the local PyQt6 library and Skraper image importer')
     register = commands.add_parser('register-roms', help='register a PC folder recursively using the shared workflow')
     register.add_argument('folder')
-    register.add_argument('--device', required=True)
     register.add_argument('--system', choices=SYSTEMS, required=True)
     register.add_argument('--root', help='defaults to the selected system ROM folder')
     register.add_argument('--lookup', action='store_true', help='also look up Japanese titles online')
@@ -135,12 +129,12 @@ def parser():
 def execute(args, db):
     if args.command == 'export-title-db':
         from metadata.title_catalog import export_catalog, write_catalog
-        games = [g for g in db.games(device=args.device) if (not args.system or g['system'] == args.system)
+        games = [g for g in db.games() if (not args.system or g['system'] == args.system)
                  and (not args.confirmed_only or g['match_status'] == 'confirmed')]
         emit(write_catalog(args.out, export_catalog(db, games, hash_roms=args.hash_roms)))
     elif args.command == 'register-roms':
         from workflow import register_folder
-        emit(register_folder(db, args.folder, args.device, args.system,
+        emit(register_folder(db, args.folder, args.system,
             args.root or system_profile(args.system).root,
             Path(args.db).parent / 'metadata' / 'retronian', lookup=args.lookup))
     elif args.command in ('scan', 'connection-test'):
@@ -159,19 +153,15 @@ def execute(args, db):
                 emit(dict(connected=True, entries=client.list_directory(args.root)))
                 return
             inventory = client.scan(args.root, recursive=args.recursive, extensions=profile.extensions)
-        inventory['device'] = args.device
         inventory['system'] = profile.id
         for path in inventory['roms']:
-            db.upsert_game(args.device, path, system=profile.id)
+            db.upsert_game(path, system=profile.id)
         if args.out:
             write_new_json(args.out, inventory)
         emit(inventory)
     elif args.command == 'import-inventory':
         inventory = read_json(args.path)
-        device = inventory['device']
         profile = system_profile(inventory.get('system', 'NES'))
-        if not isinstance(device, str) or not device.strip():
-            raise ValueError('Inventory requires a nonempty device name')
         paths = inventory['roms']
         if not isinstance(paths, list):
             raise ValueError('roms must be a list of absolute paths')
@@ -180,20 +170,20 @@ def execute(args, db):
             if Path(path).suffix.lower() not in profile.extensions:
                 raise ValueError(profile.id + ' inventory accepts only ' + ', '.join(profile.extensions))
         for path in paths:
-            db.upsert_game(device, path, system=profile.id)
-        emit(dict(imported=len(paths), device=device, system=profile.id, network_access=False))
+            db.upsert_game(path, system=profile.id)
+        emit(dict(imported=len(paths), system=profile.id, network_access=False))
     elif args.command == 'import-aliases':
         items = read_json(args.path)
         db.import_aliases(items)
         emit(dict(imported=len(items)))
     elif args.command == 'match':
         aliases = db.aliases()
-        for game in db.games(device=args.device):
+        for game in db.games():
             if game['match_status'] != 'confirmed':
                 db.save_candidates(game['id'], candidates(game['rom_filename'], game['system'], aliases))
-        emit(dict(processed=len(db.games(device=args.device)), automatic_confirmation=False))
+        emit(dict(processed=len(db.games()), automatic_confirmation=False))
     elif args.command == 'list':
-        games = db.games(device=args.device, pending=args.pending)
+        games = db.games(pending=args.pending)
         for game in games:
             game['candidates'] = db.get_candidates(game['id'])
         emit(games)
@@ -242,7 +232,7 @@ def execute(args, db):
             artwork['game_id'] = game['id']
             emit(artwork)
     elif args.command == 'preview':
-        games = db.games(device=args.device)
+        games = db.games()
         for game in games:
             game['candidates'] = db.get_candidates(game['id'])
         manifest = review_manifest(games)

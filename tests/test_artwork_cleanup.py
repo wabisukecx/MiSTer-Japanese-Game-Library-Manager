@@ -12,7 +12,7 @@ class ArtworkCleanupTests(unittest.TestCase):
             root = Path(tmp)
             db = Store(root / 'db')
             try:
-                game = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+                game = db.upsert_game('/media/fat/games/NES/Game.nes')
                 original, edited = root / 'original.png', root / 'edited.png'
                 original.write_bytes(b'original')
                 edited.write_bytes(b'edited')
@@ -38,7 +38,7 @@ class ArtworkCleanupTests(unittest.TestCase):
             root = Path(tmp)
             db = Store(root / 'db')
             try:
-                game = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+                game = db.upsert_game('/media/fat/games/NES/Game.nes')
                 missing = root / 'missing.png'
                 db.save_artwork(game, 'test', 'JP', missing.as_uri(), missing, 'sha')
                 with patch.object(Path, 'stat', side_effect=PermissionError()):

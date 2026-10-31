@@ -77,7 +77,7 @@ class TitleProviderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Store(Path(tmp) / 'db')
             try:
-                game_id = db.upsert_game('test', '/media/fat/games/Saturn/Game (Japan) (Disc 1).chd', 'SATURN')
+                game_id = db.upsert_game('/media/fat/games/Saturn/Game (Japan) (Disc 1).chd', 'SATURN')
                 db.save_candidates(game_id, [dict(japanese_title='手動候補', source='manual', score=.8)])
                 with patch.object(retronian, 'load_catalog', return_value=([native()], 'cache')), \
                         patch.object(redump, 'load_catalog', return_value=([local_name(title='別のゲーム')], 'cache')):
@@ -117,7 +117,7 @@ class TitleProviderTests(unittest.TestCase):
             try:
                 profile = system_profile('SATURN')
                 self.assertFalse(profile.verified)
-                result = register_folder(db, root, 'test', 'SATURN', profile.root, root / 'cache', lookup=False)
+                result = register_folder(db, root, 'SATURN', profile.root, root / 'cache', lookup=False)
                 game = db.game(result['ids'][0])
                 self.assertEqual(batch_plan(db, [game])['roms'][0]['remote_path'], '/media/fat/games/Saturn/Game.chd')
                 with self.assertRaises(ValueError):
@@ -139,7 +139,7 @@ class TitleProviderTests(unittest.TestCase):
                 self.assertFalse(profile.verified)
                 with patch.object(retronian, 'load_catalog', return_value=([native()], 'cache')) as retro, \
                         patch.object(redump, 'load_catalog', return_value=([local_name()], 'cache')) as red:
-                    result = register_folder(db, root, 'test', 'PCECD', profile.root,
+                    result = register_folder(db, root, 'PCECD', profile.root,
                                              root / 'metadata' / 'retronian')
                     self.assertEqual(result['count'], 1)
                     self.assertEqual(retro.call_args.args[0], 'PCECD')

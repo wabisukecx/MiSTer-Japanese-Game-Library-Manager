@@ -23,9 +23,9 @@ class ZipROMTests(unittest.TestCase):
             original = archive.read_bytes()
             db = Store(root / 'db')
             try:
-                game_id = db.register_local_rom('test', 'NES', archive)
+                game_id = db.register_local_rom('NES', archive)
                 db.confirm(game_id, 'ゲーム')
-                self.assertEqual(db.register_local_rom('test', 'NES', archive), game_id)
+                self.assertEqual(db.register_local_rom('NES', archive), game_id)
                 game = db.game(game_id)
                 self.assertEqual(game['rom_path'], '/media/fat/games/NES/Archive name.zip')
                 self.assertEqual(game['japanese_title'], 'ゲーム')
@@ -62,14 +62,14 @@ class ZipROMTests(unittest.TestCase):
             (root / 'Plain.nes').write_bytes(b'x')
             db = Store(root / 'db')
             try:
-                old = db.register_local_rom('test', 'NES', root / 'Plain.nes')
-                legacy = db.upsert_game('test', '/media/fat/games/NES/Game (Japan).nes')
+                old = db.register_local_rom('NES', root / 'Plain.nes')
+                legacy = db.upsert_game('/media/fat/games/NES/Game (Japan).nes')
                 with db.db:
                     db.db.execute('INSERT INTO local_roms(game_id,local_rom_path) VALUES(?,?)', (legacy, str(archive)))
                 db.confirm(legacy, '旧確定')
                 db.save_artwork(legacy, 'skraper', 'JP', 'file:///a.png', 'a.png', 'h')
-                remote_only = db.upsert_game('test', '/media/fat/games/NES/Other.nes')
-                new = db.register_local_rom('test', 'NES', archive)
+                remote_only = db.upsert_game('/media/fat/games/NES/Other.nes')
+                new = db.register_local_rom('NES', archive)
                 game = db.game(new)
                 self.assertEqual((game['japanese_title'], game['match_status'], game['artwork_path']),
                                  ('旧確定', 'confirmed', 'a.png'))
@@ -101,7 +101,7 @@ class ZipROMTests(unittest.TestCase):
                 z.writestr('Game.nes', b'rom')
             db = Store(root / 'db')
             try:
-                db.register_local_rom('test', 'NES', archive)
+                db.register_local_rom('NES', archive)
                 plan = rom_transfer_plan(db.games())
                 with zipfile.ZipFile(archive, 'w') as z:
                     z.writestr('Game.nes', b'changed')

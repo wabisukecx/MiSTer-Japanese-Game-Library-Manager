@@ -100,7 +100,7 @@ class SafetyTests(unittest.TestCase):
         self.enable_titles()
         self.db.confirm(self.game, 'ゲーム')
         other_path = '/media/fat/games/SNES/Game.sfc'
-        other = self.db.upsert_game('test', other_path, 'SNES')
+        other = self.db.upsert_game(other_path, 'SNES')
         self.db.confirm(other, 'ゲーム')
         self.ftp.files[other_path] = b'other-rom'
         plan = batch_plan(self.db, [self.db.game(self.game)])
@@ -223,9 +223,9 @@ class SafetyTests(unittest.TestCase):
             (folder / name).mkdir(parents=True)
         for name in ('a/Game.nes', 'a/deep/GAME.NES', 'media/Skip.nes', '.hidden/Hidden.nes'):
             (folder / name).write_bytes(b'rom')
-        result = register_folder(self.db, folder, 'new', 'NES', '/media/fat/games/NES', self.root, lookup=False)
+        result = register_folder(self.db, folder, 'NES', '/media/fat/games/NES', self.root, lookup=False)
         self.assertEqual((result['count'], result['duplicates']), (1, ['GAME.NES']))
-        self.assertEqual(self.db.setting('workflow/new/NES')['rom_folder'], str(folder))
+        self.assertEqual(self.db.setting('workflow/NES')['rom_folder'], str(folder))
 
     def test_batch_plan_uses_live_db_selection(self):
         old_view = self.db.games()
@@ -245,7 +245,7 @@ class SafetyTests(unittest.TestCase):
         (folder / 'New.nes').write_bytes(b'rom')
         with patch('sys.stdout', new=io.StringIO()) as output:
             self.assertEqual(main(['--db', str(self.root / 'cli-db'), 'register-roms', str(folder.parent),
-                                   '--device', 'cli', '--system', 'NES']), 0)
+                                   '--system', 'NES']), 0)
             self.assertEqual(json.loads(output.getvalue())['count'], 1)
 
     def test_optional_existing_rom_check_rejects_pc_changes_after_review(self):

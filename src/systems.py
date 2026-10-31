@@ -89,10 +89,9 @@ SYSTEMS = {
                   usage_note='単体CHD形式に対応。CUE/BIN・複数ディスクの一括管理は対象外です。',
                   max_zip_rom_bytes=1024 * 1024 * 1024),
     'NGP': System('NGP', 'ネオジオポケット', '/media/fat/games/NGPC', ('.ngp', '.zip'), ('.ngp',),
-                  'SNK - Neo Geo Pocket', 25, alternate_roots=('/media/fat/games/NGP',), siblings=('NGPC',)),
+                  'SNK - Neo Geo Pocket', 25),
     'NGPC': System('NGPC', 'ネオジオポケットカラー', '/media/fat/games/NGPC', ('.ngc', '.npc', '.zip'),
-                   ('.ngc', '.npc'), 'SNK - Neo Geo Pocket Color', 82,
-                   alternate_roots=('/media/fat/games/NGP',), siblings=('NGP',)),
+                   ('.ngc', '.npc'), 'SNK - Neo Geo Pocket Color', 82),
     'VB': System('VB', 'バーチャルボーイ', '/media/fat/games/VirtualBoy', ('.vb', '.zip'), ('.vb',),
                  'Nintendo - Virtual Boy', 11),
 }

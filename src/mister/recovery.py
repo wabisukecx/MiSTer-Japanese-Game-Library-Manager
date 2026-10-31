@@ -22,6 +22,26 @@ def save_journal(report, journal):
     temp.replace(report)
 
 
+def pending_recovery_reports(folder):
+    """Find unfinished writes or failed rollback, excluding successful transfers."""
+    reports = []
+    for report in sorted(Path(folder).glob('*/transfer.json')):
+        try:
+            journal = json.loads(report.read_text(encoding='utf-8'))
+            if not isinstance(journal, dict):
+                continue
+            validate_journal(journal)
+            if journal.get('status') in ('verified', 'rolled_back'):
+                continue
+            if journal.get('status') == 'rollback_failed' or any(
+                    row['status'] in ('staging', 'moving_original', 'publishing', 'verified', 'restoring', 'restore_failed')
+                    for row in journal['items']):
+                reports.append(str(report.resolve()))
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return reports
+
+
 def validate_journal(journal):
     run_id = journal.get('run_id', '')
     if journal.get('schema') != 'mister-jp-transfer/v2' or not re.fullmatch('[0-9a-f]{32}', run_id):

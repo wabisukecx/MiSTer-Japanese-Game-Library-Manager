@@ -2,17 +2,13 @@
 
 ライブラリで集めたROM名と日本語名の対応を、将来再利用できるJSONとして保存します。対象は登録済みROMの候補・確定名・判断履歴です。ダウンロードした各DBのカタログ全体は出力しません。
 
-## GUIから使う
-
-「詳細機能 → 日本語名DBを書き出す（JSON）」を選びます。チェックしたROMがあればそのROM、なければ現在のフィルターで表示されているROMを出力します。標準の保存先はライブラリDBの隣の `title-db/` です。GUIからの出力ではROM内容を読みません。
-
-「詳細機能 → 日本語名DBのJSONをマージ」では、本ツールで出力したJSONを複数選び、統合結果を新しいJSONに保存します。入力ファイル、ライブラリの確定名、MiSTerの内容は変更しません。既存の出力ファイルは上書きしません。
-
 ## CLIから使う
+
+書き出し・マージはCLIで実行します。GUIには専用メニューを設けていません。
 
 ```powershell
 mister-jp-library export-title-db --out work/title-db/titles.json
-mister-jp-library export-title-db --device living-room --system NES --confirmed-only --out work/title-db/nes.json
+mister-jp-library export-title-db --system NES --confirmed-only --out work/title-db/nes.json
 mister-jp-library export-title-db --hash-roms --out work/title-db/titles-with-hashes.json
 mister-jp-library merge-title-db work/title-db/first.json work/title-db/second.json --out work/title-db/merged.json
 ```

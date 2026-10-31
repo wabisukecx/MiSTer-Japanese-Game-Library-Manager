@@ -97,7 +97,7 @@ class JapanesePlatformTests(unittest.TestCase):
                     with patch.object(gamedatabase, 'load_catalog', return_value=(gamedatabase.convert_csv(csv_data()), 'cache')), \
                             patch.object(redump, 'load_catalog', return_value=([dict(dat_name='Game (Japan)',
                                 local_name='ゲーム', region='Japan', disc_id='123')], 'cache')):
-                        result = register_folder(db, root, 'test', system, profile.root, root / 'metadata' / 'retronian')
+                        result = register_folder(db, root, system, profile.root, root / 'metadata' / 'retronian')
                     self.assertEqual(result['count'], 1)
                     self.assertEqual(result['lookup']['matched'], 1)
                     game = db.game(result['ids'][0])
@@ -128,16 +128,33 @@ class JapanesePlatformTests(unittest.TestCase):
                 local_rom_path=str(archive)), gamedatabase.convert_csv(csv_data()))
             self.assertEqual(matches[0]['score'], 1)
 
-    def test_ngp_color_family_routes_mixed_files_to_the_shared_mister_root(self):
+    def test_ngp_and_color_keep_separate_pc_settings_with_shared_mister_root(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ('Mono.ngp', 'Color.ngc', 'Other.npc'):
-                (root / name).write_bytes(b'rom')
+            mono, color = root / 'NGP', root / 'NGPC'
+            mono.mkdir()
+            color.mkdir()
+            (mono / 'Mono.ngp').write_bytes(b'rom')
+            (color / 'Color.ngc').write_bytes(b'rom')
+            (color / 'Other.npc').write_bytes(b'rom')
+            # A file for the other system does not change its registration/settings.
+            (color / 'Wrong.ngp').write_bytes(b'rom')
             db = Store(root / 'db')
             try:
-                result = register_folder(db, root, 'test', 'NGP', '/media/fat/games/NGPC', root, lookup=False)
-                self.assertEqual(result['count'], 3)
+                result = register_folder(db, mono, 'NGP', '/media/fat/games/NGPC', root, lookup=False)
+                self.assertEqual(result['count'], 1)
+                mono_profile = db.setting('workflow/NGP')
+                mono_profile['image_folder'] = str(root / 'mono-images')
+                db.set_setting('workflow/NGP', mono_profile)
+                result = register_folder(db, color, 'NGPC', '/media/fat/games/NGPC', root, lookup=False)
+                self.assertEqual(result['count'], 2)
+                self.assertEqual(db.setting('workflow/NGP'), mono_profile)
+                self.assertEqual(db.setting('workflow/NGPC')['rom_folder'], str(color))
+                self.assertEqual(db.setting('workflow/NGPC')['image_folder'], str(color / 'media' / 'box2dfront'))
                 self.assertEqual({g['rom_filename']: g['system'] for g in db.games()},
                                  {'Mono.ngp': 'NGP', 'Color.ngc': 'NGPC', 'Other.npc': 'NGPC'})
+                self.assertTrue(all(g['rom_path'].startswith('/media/fat/games/NGPC/') for g in db.games()))
+                register_folder(db, mono, 'NGP', '/media/fat/games/NGPC', root, lookup=False)
+                self.assertEqual(db.setting('workflow/NGPC')['rom_folder'], str(color))
             finally:
                 db.close()

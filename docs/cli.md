@@ -10,12 +10,13 @@ mister-jp-library <command> --help
 DBの既定値は `work/library.sqlite3` です。`--db` はサブコマンドより前に指定します。
 相対パスは実行時の作業ディレクトリを基準に解決します。
 `--system` は機種IDで指定します。例ではファミコンのID `NES` を使います。日本語の機種名との対応は[対応機種](systems.md)を参照してください。
+ライブラリ分割と `--device` オプションは廃止しました。旧形式のinventory JSONに含まれる `device` は無視します。既存DBは[旧バージョンからの移行](gui.md#旧バージョンからの移行)に従って自動統合します。
 
 ## ROMの登録と一覧
 
 ```powershell
-mister-jp-library register-roms 'D:\ROMs\NES' --device living-room --system NES
-mister-jp-library list --device living-room
+mister-jp-library register-roms 'D:\ROMs\NES' --system NES
+mister-jp-library list
 ```
 
 register-romsはサブフォルダーも探索します。`--root` で機種の対応ルートを選べます。
@@ -25,7 +26,7 @@ CLIでは登録のみが既定です。対応する公開DBによる日本語名
 
 ```powershell
 mister-jp-library connection-test --host 192.0.2.10 --user root
-mister-jp-library scan --host 192.0.2.10 --user root --device living-room --system NES --out work/nes-inventory.json
+mister-jp-library scan --host 192.0.2.10 --user root --system NES --out work/nes-inventory.json
 ```
 
 `192.0.2.10` は例示用です。所有するMiSTerのIPに置き換えてください。パスワードは非表示の対話入力です。
@@ -39,8 +40,8 @@ scanではROMの内容をダウンロードしません。消えたROMのDB登�
 
 ```powershell
 mister-jp-library import-aliases my-aliases.json
-mister-jp-library match --device living-room
-mister-jp-library list --device living-room --pending
+mister-jp-library match
+mister-jp-library list --pending
 mister-jp-library confirm 1 '確認した日本語名'
 mister-jp-library unconfirm 1
 ```
@@ -62,7 +63,7 @@ mister-jp-library export-title-db --system SATURN --confirmed-only --hash-roms -
 mister-jp-library merge-title-db work/title-db/titles.json work/title-db/saturn.json --out work/title-db/merged.json
 ```
 
-`export-title-db` は `--device`・`--system`・`--confirmed-only` で絞れます。`--hash-roms` を付けるとローカルROMを読み、SHA-256を追加します。ZIPでは内部ROMのハッシュです。マージはネット接続やライブラリDBを必要とせず、既存ファイルは上書きしません。
+`export-title-db` は `--system`・`--confirmed-only` で絞れます。`--hash-roms` を付けるとローカルROMを読み、SHA-256を追加します。ZIPでは内部ROMのハッシュです。マージはネット接続やライブラリDBを必要とせず、既存ファイルは上書きしません。
 
 ## 画像取得
 
@@ -88,7 +89,7 @@ mister-jp-library screenscraper-download 1 --provider-game-id 1234
 ## 確認用出力と復旧
 
 ```powershell
-mister-jp-library preview --device living-room --out work/review.json
+mister-jp-library preview --out work/review.json
 mister-jp-library recover-transfer work/transfer-backups/<実行ID>/transfer.json --host 192.0.2.10 --user root
 ```
 
@@ -125,9 +126,9 @@ recover-transferは実機のファイルを転送前へ戻す操作です。v2�
 ```powershell
 mister-jp-library --db work/demo.sqlite3 import-inventory tests/fixtures/inventory.json
 mister-jp-library --db work/demo.sqlite3 import-aliases tests/fixtures/aliases.json
-mister-jp-library --db work/demo.sqlite3 match --device demo
-mister-jp-library --db work/demo.sqlite3 list --device demo --pending
-mister-jp-library --db work/demo.sqlite3 preview --device demo --out work/demo-review.json
+mister-jp-library --db work/demo.sqlite3 match
+mister-jp-library --db work/demo.sqlite3 list --pending
+mister-jp-library --db work/demo.sqlite3 preview --out work/demo-review.json
 ```
 
 再実行時にpreviewの出力が存在する場合は、別の出力名を指定します。

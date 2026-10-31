@@ -56,7 +56,7 @@ class TransferTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.db = Store(self.root / 'db')
-        self.game = self.db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+        self.game = self.db.upsert_game('/media/fat/games/NES/Game.nes')
         self.image = self.root / 'art.png'
         self.image.write_bytes(PNG)
         self.db.save_artwork(self.game, 'test', 'JP', self.image.as_uri(), self.image,
@@ -111,7 +111,7 @@ class TransferTests(unittest.TestCase):
     def local_rom(self):
         source = self.root / 'Game.nes'
         source.write_bytes(b'local-rom')
-        game = self.db.register_local_rom('test', 'NES', source)
+        game = self.db.register_local_rom('NES', source)
         self.assertEqual(game, self.game)
         return rom_transfer_plan(self.db.games())
 
@@ -195,10 +195,10 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(game['artwork_path'], str(self.image))
         source = self.root / 'Example.md'
         source.write_bytes(b'md-rom')
-        game_id = self.db.register_local_rom('test', 'MD', source, '/media/fat/games/Genesis')
+        game_id = self.db.register_local_rom('MD', source, '/media/fat/games/Genesis')
         self.assertEqual(self.db.game(game_id)['rom_path'], '/media/fat/games/Genesis/Example.md')
         with self.assertRaises(ValueError):
-            self.db.register_local_rom('test', 'SNES', source)
+            self.db.register_local_rom('SNES', source)
 
     def test_changed_local_image_aborts_before_writes(self):
         self.image.write_bytes(b'changed')

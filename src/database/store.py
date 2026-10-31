@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import closing, contextmanager
 from pathlib import Path, PurePosixPath
 from metadata.matcher import normalize, regions
 from systems import SYSTEMS, system_profile
@@ -50,11 +51,116 @@ class Store:
             if 'archive_member' not in {r['name'] for r in self.db.execute('PRAGMA table_info(local_roms)')}:
                 self.db.execute('ALTER TABLE local_roms ADD COLUMN archive_member TEXT')
             self.db.executemany('INSERT OR IGNORE INTO systems VALUES (?)', [(s,) for s in SYSTEMS])
+        try:
+            self._remove_library_groups(path)
+            self._standardize_ngp_destination(path)
+        except Exception:
+            self.db.close()
+            raise
+
+    def _backup_before_migration(self, path, suffix):
+        backup = Path(str(path) + suffix)
+        if not backup.exists():
+            temporary = backup.with_suffix(backup.suffix + '.tmp')
+            try:
+                with closing(sqlite3.connect(temporary)) as destination:
+                    self.db.backup(destination)
+                temporary.replace(backup)
+            finally:
+                temporary.unlink(missing_ok=True)
+
+    def _standardize_ngp_destination(self, path):
+        """Normalize old transfer targets; PC ROM and image paths remain per system."""
+        old_root, new_root = '/media/fat/games/NGP', '/media/fat/games/NGPC'
+        games = self.db.execute("SELECT * FROM games WHERE system IN ('NGP','NGPC') AND rom_path LIKE ?",
+                                (old_root + '/%',)).fetchall()
+        profiles = []
+        for system in ('NGP', 'NGPC'):
+            key = 'workflow/' + system
+            profile = self.setting(key, {})
+            if profile.get('remote_root') == old_root:
+                profiles.append((key, dict(profile, remote_root=new_root)))
+        if not games and not profiles:
+            return
+        self._backup_before_migration(path, '.before-ngpc-folder.sqlite3')
+        with self.db:
+            for old in games:
+                destination = new_root + old['rom_path'][len(old_root):]
+                target = self.db.execute('SELECT id FROM games WHERE system=? AND rom_path=?',
+                                         (old['system'], destination)).fetchone()
+                if target:
+                    self._merge_legacy_game(target['id'], old)
+                else:
+                    self.db.execute('UPDATE games SET rom_path=? WHERE id=?', (destination, old['id']))
+            for key, profile in profiles:
+                self.db.execute('UPDATE settings SET value=? WHERE key=?', (json.dumps(profile, ensure_ascii=False), key))
+
+    def _remove_library_groups(self, path):
+        """Keep the legacy device column empty; merge old groups with a backup first."""
+        legacy = self.db.execute("SELECT 1 FROM games WHERE device!='' LIMIT 1").fetchone()
+        profiles = self.db.execute("SELECT key,value FROM settings WHERE key LIKE 'workflow/%/%' ORDER BY rowid").fetchall()
+        if not legacy and not profiles:
+            return
+        self._backup_before_migration(path, '.before-library-removal.sqlite3')
+        scope = self.setting('ui/scope', {}) or {}
+        with self.db:
+            profiles = sorted(profiles, key=lambda r: r['key'].split('/')[1] == scope.get('device'))
+            existing = {r[0] for r in self.db.execute("SELECT key FROM settings WHERE key LIKE 'workflow/%' AND key NOT LIKE 'workflow/%/%'")}
+            for row in profiles:
+                profile = json.loads(row['value'])
+                profile.pop('device', None)
+                key = 'workflow/' + row['key'].rsplit('/', 1)[1]
+                if key not in existing:
+                    self.db.execute('INSERT OR REPLACE INTO settings VALUES (?,?)', (key, json.dumps(profile, ensure_ascii=False)))
+                self.db.execute('DELETE FROM settings WHERE key=?', (row['key'],))
+            if 'device' in scope:
+                scope.pop('device')
+                self.db.execute('UPDATE settings SET value=? WHERE key=?', (json.dumps(scope), 'ui/scope'))
+            for old in self.db.execute('SELECT * FROM games ORDER BY id').fetchall():
+                target = self.db.execute("SELECT id FROM games WHERE system=? AND rom_path=? AND device=''",
+                                         (old['system'], old['rom_path'])).fetchone()
+                if target is None:
+                    self.db.execute("UPDATE games SET device='' WHERE id=?", (old['id'],))
+                elif target['id'] != old['id']:
+                    self._merge_legacy_game(target['id'], old)
+
+    def _merge_legacy_game(self, game_id, old):
+        """Preserve evidence and image edits when old groups contain the same ROM."""
+        current = self.game(game_id)
+        if current['match_status'] == 'unmatched' and old['match_status'] == 'review':
+            self.db.execute("UPDATE games SET match_status='review' WHERE id=?", (game_id,))
+        self.db.execute('UPDATE match_candidates SET game_id=? WHERE game_id=?', (game_id, old['id']))
+        self.db.execute('UPDATE title_decisions SET game_id=? WHERE game_id=?', (game_id, old['id']))
+        for artwork in self.db.execute('SELECT id,url FROM artworks WHERE game_id=?', (old['id'],)).fetchall():
+            url = artwork['url']
+            if self.db.execute('SELECT 1 FROM artworks WHERE game_id=? AND url=?', (game_id, url)).fetchone():
+                url += '#legacy-artwork-' + str(artwork['id'])
+            self.db.execute('UPDATE artworks SET game_id=?,url=? WHERE id=?', (game_id, url, artwork['id']))
+        if old['japanese_title'] and old['match_status'] == 'confirmed':
+            conflicted = any(c.get('source') == 'legacy-library' for c in self.get_candidates(game_id))
+            if conflicted or (current['japanese_title'] and current['japanese_title'] != old['japanese_title']):
+                for title in (current['japanese_title'], old['japanese_title']):
+                    if not title:
+                        continue
+                    self.db.execute('INSERT INTO match_candidates(game_id,payload) VALUES (?,?)',
+                        (game_id, json.dumps(dict(japanese_title=title, score=1, source='legacy-library',
+                            reason='旧ライブラリの確定名が競合'), ensure_ascii=False)))
+                self.db.execute("UPDATE games SET japanese_title=NULL,match_status='review',sync_status='blocked' WHERE id=?", (game_id,))
+            elif current['match_status'] != 'confirmed':
+                self.db.execute("UPDATE games SET japanese_title=?,match_status='confirmed' WHERE id=?", (old['japanese_title'], game_id))
+        if not current['artwork_path'] and old['artwork_path']:
+            self.db.execute('UPDATE games SET artwork_path=?,artwork_source=?,artwork_region=? WHERE id=?',
+                            (old['artwork_path'], old['artwork_source'], old['artwork_region'], game_id))
+        local = self.db.execute('SELECT local_rom_path,archive_member FROM local_roms WHERE game_id=?', (old['id'],)).fetchone()
+        if local:
+            self.db.execute('INSERT OR IGNORE INTO local_roms VALUES (?,?,?)', (game_id, local['local_rom_path'], local['archive_member']))
+        self.db.execute('DELETE FROM local_roms WHERE game_id=?', (old['id'],))
+        self.db.execute('DELETE FROM games WHERE id=?', (old['id'],))
 
     def close(self):
         self.db.close()
 
-    def prune_missing_artworks(self, *, cancelled=lambda: False):
+    def prune_missing_artworks(self, *, cancelled=lambda: False, game_ids=None):
         """Remove missing file references; keep unreadable files and valid edited copies."""
         def missing(path):
             try:
@@ -65,15 +171,19 @@ class Store:
                 # A permissions/network failure is not evidence of deletion.
                 return False
             return False
-        rows = list(self.db.execute('SELECT id,local_path FROM artworks'))
+        rows = list(self.db.execute('SELECT id,game_id,local_path FROM artworks'))
         missing_ids = []
         for row in rows:
+            if game_ids is not None and row['game_id'] not in game_ids:
+                continue
             if cancelled():
                 raise InterruptedError('画像リンクの確認を中断しました')
             if missing(row['local_path']):
                 missing_ids.append(row['id'])
         selected = []
         for game in self.db.execute('SELECT id,artwork_path FROM games WHERE artwork_path IS NOT NULL'):
+            if game_ids is not None and game['id'] not in game_ids:
+                continue
             if cancelled():
                 raise InterruptedError('画像リンクの確認を中断しました')
             if missing(game['artwork_path']):
@@ -96,21 +206,21 @@ class Store:
             self.db.execute('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
                             (key, json.dumps(value, ensure_ascii=False)))
 
-    def upsert_game(self, device, rom_path, system='NES'):
+    def upsert_game(self, rom_path, system='NES'):
         system_profile(system)
         name = PurePosixPath(rom_path).name
         with self.db:
             self.db.execute('''INSERT OR IGNORE INTO games
                 (device,system,rom_path,rom_filename,original_title,region) VALUES(?,?,?,?,?,?)''',
-                (device, system, rom_path, name, normalize(name), ','.join(regions(name))))
+                ('', system, rom_path, name, normalize(name), ','.join(regions(name))))
         return self.db.execute('SELECT id FROM games WHERE device=? AND system=? AND rom_path=?',
-                               (device, system, rom_path)).fetchone()[0]
+                               ('', system, rom_path)).fetchone()[0]
 
-    def games(self, device=None, pending=False):
+    def games(self, pending=False):
         return [dict(r) for r in self.db.execute('''SELECT games.*,local_roms.local_rom_path,local_roms.archive_member FROM games
             LEFT JOIN local_roms ON local_roms.game_id=games.id
-            WHERE (? IS NULL OR device=?) AND (?=0 OR match_status!='confirmed') ORDER BY id''',
-            (device, device, int(pending)))]
+            WHERE (?=0 OR match_status!='confirmed') ORDER BY id''',
+            (int(pending),))]
 
     def game(self, game_id):
         row = self.db.execute('''SELECT games.*,local_roms.local_rom_path,local_roms.archive_member FROM games
@@ -119,7 +229,7 @@ class Store:
             raise ValueError('Unknown game ID')
         return dict(row)
 
-    def register_local_rom(self, device, system, path, remote_root=None):
+    def register_local_rom(self, system, path, remote_root=None):
         profile = system_profile(system)
         root = remote_root or profile.root
         source = Path(path).resolve(strict=True)
@@ -128,7 +238,7 @@ class Store:
                 or any(ord(c) < 32 for c in source.name) or '\\' in source.name):
             raise ValueError('機種・ROMファイル・転送先を確認してください')
         info = rom_info(source, system)
-        game_id = self.upsert_game(device, str(PurePosixPath(root) / info['name']), system)
+        game_id = self.upsert_game(str(PurePosixPath(root) / info['name']), system)
         with self.db:
             self.db.execute('''INSERT INTO local_roms(game_id,local_rom_path,archive_member) VALUES (?,?,?) ON CONFLICT(game_id)
                 DO UPDATE SET local_rom_path=excluded.local_rom_path,archive_member=excluded.archive_member''',
@@ -140,7 +250,7 @@ class Store:
     def adopt_legacy_extracted(self, game_id):
         """Fold a game registered earlier under the extracted ROM name (Game.nes) into its ZIP (Game.zip).
 
-        Games (including ones listed from the MiSTer scan) with the same library/system/folder and file stem qualify; titles, images and
+        Games (including ones listed from the MiSTer scan) with the same system/folder and file stem qualify; titles, images and
         the selection move to the ZIP entry unless it already has its own."""
         new = self.game(game_id)
         stem = PurePosixPath(new['rom_path']).stem.casefold()
@@ -168,11 +278,32 @@ class Store:
                 self.db.execute('DELETE FROM games WHERE id=?', (old['id'],))
             new = self.game(game_id)
 
+    @contextmanager
+    def transaction(self):
+        if self.db.in_transaction:
+            yield
+        else:
+            with self.db:
+                self.db.execute('BEGIN')
+                yield
+
+    def save_game_review(self, game_id, title, artwork_id=None, rotation=None):
+        """Commit the displayed title and image together, or roll back both."""
+        with self.transaction():
+            if rotation is not None:
+                artwork_id = self.register_rotated_artwork(game_id, artwork_id, rotation)
+            if artwork_id is not None:
+                self.select_artwork(game_id, artwork_id)
+            game = self.game(game_id)
+            if title.strip() and (game['match_status'] != 'confirmed' or game['japanese_title'] != title):
+                self.confirm(game_id, title)
+        return artwork_id
+
     def confirm(self, game_id, title):
         game = self.game(game_id)
         if not title.strip() or any(ord(c) < 32 for c in title):
             raise ValueError('Title must be nonempty and contain no control characters')
-        with self.db:
+        with self.transaction():
             self.db.execute("UPDATE games SET japanese_title=?,match_status='confirmed' WHERE id=?",
                             (title, game_id))
             self.record_title_decision(game_id, 'confirmed', game['japanese_title'], title)
@@ -303,7 +434,7 @@ class Store:
         uri = path.as_uri()
         if str(path) == str(Path(source['local_path']).resolve()):
             raise ValueError('補正画像は元画像と別ファイルにしてください')
-        with self.db:
+        with self.transaction():
             self.db.execute('''INSERT OR IGNORE INTO artworks(game_id,source,region,url,local_path,sha256)
                 VALUES(?,?,?,?,?,?)''', (game_id, source['source'], source['region'], uri, str(path), result['sha256']))
             artwork = self.db.execute('SELECT id,sha256 FROM artworks WHERE game_id=? AND url=?',
@@ -322,6 +453,6 @@ class Store:
         row = self.db.execute('SELECT * FROM artworks WHERE id=? AND game_id=?', (artwork_id, game_id)).fetchone()
         if row is None:
             raise ValueError('選択した画像はこのゲームの候補ではありません')
-        with self.db:
+        with self.transaction():
             self.db.execute('UPDATE games SET artwork_source=?,artwork_region=?,artwork_path=? WHERE id=?',
                             (row['source'], row['region'], row['local_path'], game_id))

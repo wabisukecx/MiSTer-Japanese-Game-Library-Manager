@@ -38,7 +38,7 @@ class AddedSystemsTests(unittest.TestCase):
                     folder.mkdir()
                     (folder / ('Game (Japan)' + extension)).write_bytes(b'rom')
                     profile = system_profile(system)
-                    result = register_folder(db, folder, 'test', system, profile.root, root / 'cache', lookup=False)
+                    result = register_folder(db, folder, system, profile.root, root / 'cache', lookup=False)
                     self.assertEqual(result['count'], 1)
                     game = db.game(result['ids'][0])
                     self.assertEqual(game['system'], system)
@@ -61,7 +61,7 @@ class AddedSystemsTests(unittest.TestCase):
                 archive.writestr('Color.wsc', b'wsc')
             db = Store(root / 'db')
             stack.callback(db.close)
-            result = register_folder(db, root, 'test', 'WS', system_profile('WS').root, root, lookup=False)
+            result = register_folder(db, root, 'WS', system_profile('WS').root, root, lookup=False)
             self.assertEqual(result['count'], 2)
             self.assertEqual({g['system'] for g in db.games()}, {'WS', 'WSC'})
 

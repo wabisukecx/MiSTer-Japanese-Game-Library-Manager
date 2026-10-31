@@ -14,7 +14,7 @@ class CLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             dbpath = str(Path(tmp) / 'library.sqlite3')
             db = Store(dbpath)
-            game_id = db.upsert_game('device', '/games/NES/Dr. Mario.nes')
+            game_id = db.upsert_game('/games/NES/Dr. Mario.nes')
             db.confirm(game_id, '手動確定タイトル')
             db.save_artwork(game_id, 'manual', 'JP', 'local:existing', 'existing.png', 'old-hash')
             db.close()
@@ -47,7 +47,7 @@ class CLITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             dbpath = str(Path(tmp) / 'db.sqlite3')
             db = Store(dbpath)
-            game_id = db.upsert_game('device', '/games/NES/Dr. Mario.nes')
+            game_id = db.upsert_game('/games/NES/Dr. Mario.nes')
             db.close()
             with patch.dict('os.environ', {}, clear=True), \
                     patch('main.ScreenScraper') as api, \

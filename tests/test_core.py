@@ -43,26 +43,53 @@ class StoreTests(unittest.TestCase):
         self.db.close()
         self.tmp.cleanup()
 
+    def test_game_review_saves_title_and_image_together_and_rolls_back_failure(self):
+        game = self.db.upsert_game('/media/fat/games/NES/Game.nes')
+        image = Path(self.tmp.name) / 'image.png'
+        self.db.save_artwork(game, 'test', 'JP', 'test:image', image, 'a' * 64, select=False)
+        artwork = self.db.artworks(game)[0]['id']
+        with self.assertRaises(ValueError):
+            self.db.save_game_review(game, '不正\nタイトル', artwork)
+        self.assertIsNone(self.db.game(game)['artwork_path'])
+        self.assertIsNone(self.db.game(game)['japanese_title'])
+        self.assertEqual(self.db.title_decisions(game), [])
+        self.db.save_game_review(game, '日本語名', artwork)
+        self.assertEqual(self.db.game(game)['artwork_path'], str(image))
+        self.assertEqual(self.db.game(game)['japanese_title'], '日本語名')
+        self.assertEqual(len(self.db.title_decisions(game)), 1)
+        self.db.save_game_review(game, '日本語名', artwork)
+        self.assertEqual(len(self.db.title_decisions(game)), 1)
+
+    def test_game_review_allows_title_only_or_image_only(self):
+        title_game = self.db.upsert_game('/media/fat/games/NES/Title.nes')
+        self.db.save_game_review(title_game, '名前のみ')
+        self.assertEqual(self.db.game(title_game)['japanese_title'], '名前のみ')
+        image_game = self.db.upsert_game('/media/fat/games/NES/Image.nes')
+        self.db.save_artwork(image_game, 'test', 'JP', 'test:image', 'image.png', 'a' * 64, select=False)
+        self.db.save_game_review(image_game, '', self.db.artworks(image_game)[0]['id'])
+        self.assertIsNone(self.db.game(image_game)['japanese_title'])
+        self.assertEqual(self.db.game(image_game)['artwork_path'], 'image.png')
+
     def test_manual_title_survives_rescan_and_candidates(self):
-        game = self.db.upsert_game('device1', '/media/fat/games/NES/Mario.nes')
+        game = self.db.upsert_game('/media/fat/games/NES/Mario.nes')
         self.db.confirm(game, 'マリオ')
-        self.db.upsert_game('device1', '/media/fat/games/NES/Mario.nes')
+        self.db.upsert_game('/media/fat/games/NES/Mario.nes')
         self.db.save_candidates(game, [dict(japanese_title='誤り', score=1, reason='alias')])
         row = self.db.games()[0]
         self.assertEqual(row['japanese_title'], 'マリオ')
         self.assertEqual(row['match_status'], 'confirmed')
 
-    def test_devices_regions_and_revisions_are_separate(self):
-        for device, name in [('a', 'X (Japan).nes'), ('a', 'X (Japan) (Rev 1).nes'), ('b', 'X (Japan).nes')]:
-            self.db.upsert_game(device, '/games/NES/' + name)
-        self.assertEqual(len(self.db.games()), 3)
+    def test_repeated_registration_is_deduplicated_and_revisions_are_separate(self):
+        for name in ['X (Japan).nes', 'X (Japan) (Rev 1).nes', 'X (Japan).nes']:
+            self.db.upsert_game('/games/NES/' + name)
+        self.assertEqual(len(self.db.games()), 2)
 
     def test_unknown_id_rejected(self):
         with self.assertRaises(ValueError):
             self.db.confirm(99, '不明')
 
     def test_japanese_round_trip_and_pending_filter(self):
-        game = self.db.upsert_game('a', '/games/NES/日本語 (Japan).nes')
+        game = self.db.upsert_game('/games/NES/日本語 (Japan).nes')
         self.db.confirm(game, '日本語タイトル')
         self.assertEqual(self.db.games()[0]['japanese_title'], '日本語タイトル')
         self.assertEqual(self.db.games(pending=True), [])

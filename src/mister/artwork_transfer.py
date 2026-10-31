@@ -65,7 +65,7 @@ def transfer_plan(db, games, *, allow_empty=False):
         items.append(dict(game_id=game['id'], system=game['system'], local_path=image['local_path'], sha256=image['sha256'],
                           remote_path=str(rom.parent / 'media' / name), rom_path=str(rom)))
     if len({i['remote_path'] for i in items}) != len(items):
-        raise ValueError('転送先が重複しています。実機を1台だけ選んでください')
+        raise ValueError('転送先が重複しています。同じ転送先のROM・画像を確認してください')
     if not items and not allow_empty:
         raise ValueError('選択済み画像がありません')
     return items

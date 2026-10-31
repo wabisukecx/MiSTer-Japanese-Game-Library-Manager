@@ -43,7 +43,7 @@ class SystemsTests(unittest.TestCase):
             with self.subTest(root=rom_root), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 db = Store(root / 'db')
-                game = db.upsert_game('home', rom_root + '/Game (Japan).md', system='MD')
+                game = db.upsert_game(rom_root + '/Game (Japan).md', system='MD')
                 image = root / 'image.png'
                 image.write_bytes(PNG)
                 db.save_artwork(game, 'test', 'JP', image.as_uri(), image, hashlib.sha256(PNG).hexdigest())
@@ -76,7 +76,7 @@ class SystemsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'db'
             db = Store(path)
-            game = db.upsert_game('home', '/media/fat/games/Genesis/Game.gen', system='MD')
+            game = db.upsert_game('/media/fat/games/Genesis/Game.gen', system='MD')
             db.close()
             api = MagicMock()
             api.search.return_value = []
@@ -88,7 +88,7 @@ class SystemsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db = Store(root / 'db')
-            game = db.upsert_game('test', '/media/fat/games/SNES/Star Fox (Japan).sfc', system='SNES')
+            game = db.upsert_game('/media/fat/games/SNES/Star Fox (Japan).sfc', system='SNES')
             db.close()
             source = root / 'aliases.json'
             source.write_text(json.dumps([dict(system='SNES', alias='Star Fox (Japan)',
@@ -107,13 +107,13 @@ class SystemsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'db'
             db = Store(path)
-            old_id = db.upsert_game('home', '/media/fat/games/NES/Game.nes')
+            old_id = db.upsert_game('/media/fat/games/NES/Game.nes')
             db.confirm(old_id, 'ファミコン版')
             db.db.execute("DELETE FROM systems WHERE id='SNES'")
             db.db.commit()
             db.close()
             db = Store(path)
-            new_id = db.upsert_game('home', '/media/fat/games/SNES/Game.sfc', system='SNES')
+            new_id = db.upsert_game('/media/fat/games/SNES/Game.sfc', system='SNES')
             self.assertNotEqual(old_id, new_id)
             self.assertEqual(db.game(old_id)['japanese_title'], 'ファミコン版')
             self.assertEqual(db.game(new_id)['system'], 'SNES')
@@ -141,7 +141,7 @@ class SystemsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db = Store(root / 'db')
-            game_id = db.upsert_game('test', '/media/fat/games/SNES/Game (Japan).sfc', system='SNES')
+            game_id = db.upsert_game('/media/fat/games/SNES/Game (Japan).sfc', system='SNES')
             db.confirm(game_id, 'スーファミ作品')
             image = root / 'image.png'
             image.write_bytes(PNG)
@@ -171,7 +171,8 @@ class SystemsTests(unittest.TestCase):
         snes = dict(device='home', system='SNES', rom_path='/media/fat/games/SNES/Game.sfc',
                     match_status='confirmed', japanese_title='スーファミ版')
         with self.assertRaises(ValueError): title_mapping([snes], all_games=[nes, snes])
-        self.assertEqual(title_mapping([snes], all_games=[dict(nes, device='other'), snes]), {'Game': 'スーファミ版'})
+        with self.assertRaises(ValueError):
+            title_mapping([snes], all_games=[dict(nes, device='other'), snes])
 
     def test_import_inventory_and_api_select_snes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -196,10 +197,10 @@ class SystemsTests(unittest.TestCase):
             image = root / 'Game.png'
             image.write_bytes(PNG)
             db = Store(root / 'db')
-            snes = db.upsert_game('test', '/media/fat/games/SNES/Game.sfc', system='SNES')
+            snes = db.upsert_game('/media/fat/games/SNES/Game.sfc', system='SNES')
             plan = plan_import(root, db.games())
             self.assertEqual(apply_import(db, plan)['imported'], 1)
-            db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            db.upsert_game('/media/fat/games/NES/Game.nes')
             self.assertEqual(plan_import(root, db.games())['ready_count'], 0)
             db.close()
 

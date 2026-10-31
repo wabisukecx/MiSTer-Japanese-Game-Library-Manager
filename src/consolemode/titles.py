@@ -30,12 +30,11 @@ def title_mapping(games, *, allow_empty=False, all_games=None):
         raise ValueError('確定済みの日本語名がありません')
     if all_games is None:
         return result
-    selected = {(g['device'], g['system'], g['rom_path']) for g in games}
-    devices = {g['device'] for g in games}
+    selected = {(g['system'], g['rom_path']) for g in games}
     for other in all_games or []:
-        identity = (other['device'], other['system'], other['rom_path'])
+        identity = (other['system'], other['rom_path'])
         key = PurePosixPath(other['rom_path']).stem
-        if other['device'] in devices and identity not in selected and key in result:
+        if identity not in selected and key in result:
             if other['match_status'] != 'confirmed' or other.get('japanese_title') != result[key]:
                 raise ValueError('別の機種・ROMと別名キーが重複します。個別確認が必要です: ' + key)
     return result

@@ -44,7 +44,7 @@ class TitleResolutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Store(Path(tmp) / 'db')
             try:
-                ident = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+                ident = db.upsert_game('/media/fat/games/NES/Game.nes')
                 def snapshot():
                     game = db.game(ident)
                     game.update(_titles=db.get_candidates(ident), _artworks=[])
@@ -66,7 +66,7 @@ class TitleResolutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Store(Path(tmp) / 'db')
             try:
-                ident = db.upsert_game('test', '/media/fat/games/Saturn/Game.chd', 'SATURN')
+                ident = db.upsert_game('/media/fat/games/Saturn/Game.chd', 'SATURN')
                 db.confirm(ident, 'ゲーム Ａ')
                 with patch.object(retronian, 'load_catalog', return_value=([], 'cache')) as a, \
                         patch.object(redump, 'load_catalog', return_value=([], 'cache')) as b, \

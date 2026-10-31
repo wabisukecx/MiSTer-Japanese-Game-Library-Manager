@@ -15,7 +15,7 @@ class ImportTests(unittest.TestCase):
         self.root = Path(self.tmp.name) / 'images'
         self.root.mkdir()
         self.db = Store(Path(self.tmp.name) / 'db.sqlite3')
-        self.game = self.db.upsert_game('device', '/games/NES/Game (Japan) (Rev 1).nes')
+        self.game = self.db.upsert_game('/games/NES/Game (Japan) (Rev 1).nes')
 
     def tearDown(self):
         self.db.close()
@@ -26,7 +26,7 @@ class ImportTests(unittest.TestCase):
         image.write_bytes(PNG)
         self.db.confirm(self.game, '手動タイトル')
         self.db.save_artwork(self.game, 'manual', 'JP', 'local:old', 'old.png', 'hash')
-        plan = plan_import(self.root, self.db.games(device='device'))
+        plan = plan_import(self.root, self.db.games())
         self.assertEqual(plan['ready_count'], 1)
         self.assertEqual(len(self.db.artworks(self.game)), 1)
         result = apply_import(self.db, plan, region='UNKNOWN')
@@ -47,7 +47,7 @@ class ImportTests(unittest.TestCase):
 
     def test_ambiguous_rom_extension_and_duplicate_images_are_rejected(self):
         (self.root / 'Game (Japan) (Rev 1).png').write_bytes(PNG)
-        self.db.upsert_game('device', '/games/NES/Game (Japan) (Rev 1).zip')
+        self.db.upsert_game('/games/NES/Game (Japan) (Rev 1).zip')
         self.assertEqual(plan_import(self.root, self.db.games())['ready_count'], 0)
 
     def test_duplicate_subdirectories_are_not_arbitrarily_chosen(self):

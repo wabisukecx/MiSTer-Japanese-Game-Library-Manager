@@ -57,8 +57,8 @@ class RetronianTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Store(Path(tmp) / 'db')
             try:
-                pending = db.upsert_game('test', '/media/fat/games/NES/Game (Japan).nes')
-                confirmed = db.upsert_game('test', '/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
+                pending = db.upsert_game('/media/fat/games/NES/Game (Japan).nes')
+                confirmed = db.upsert_game('/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
                 db.confirm(confirmed, '確定名')
                 db.save_candidates(pending, [dict(japanese_title='手動候補', source='manual', score=1)])
                 def loader(system, root, **kwargs):

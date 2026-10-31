@@ -13,7 +13,7 @@ class ApprovalTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.db = Store(self.root / 'db.sqlite3')
-        self.game = self.db.upsert_game('test', '/games/NES/Game.nes')
+        self.game = self.db.upsert_game('/games/NES/Game.nes')
         self.db.save_candidates(self.game, [dict(japanese_title='日本語名', score=1, reason='alias')])
         self.image = self.root / 'art.png'
         self.image.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))

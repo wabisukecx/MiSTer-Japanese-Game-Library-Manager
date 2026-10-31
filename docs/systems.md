@@ -24,8 +24,8 @@
 | ゲームギア | `GG` | `/media/fat/games/GameGear` | `.gg` |
 | スーパー32X | `S32X` | `/media/fat/games/S32X` | `.32x` |
 | メガCD | `MCD` | `/media/fat/games/MegaCD` | `.chd` |
-| ネオジオポケット | `NGP` | `/media/fat/games/NGPC` または `/media/fat/games/NGP` | `.ngp` |
-| ネオジオポケットカラー | `NGPC` | `/media/fat/games/NGPC` または `/media/fat/games/NGP` | `.ngc`, `.npc` |
+| ネオジオポケット | `NGP` | `/media/fat/games/NGPC` | `.ngp` |
+| ネオジオポケットカラー | `NGPC` | `/media/fat/games/NGPC` | `.ngc`, `.npc` |
 | バーチャルボーイ | `VB` | `/media/fat/games/VirtualBoy` | `.vb` |
 
 対象ROMが1本入ったZIPも扱えます。PCエンジンは「モトローダー」で転送・実機動作まで確認済みです。対応機種でも、すべてのROM・Console Mode構成を確認したわけではありません。
@@ -50,7 +50,7 @@ PC側の登録はサブフォルダーを探索し、MiSTerへの転送は機種
 メガドライブの2つのルートは、使用中の実機の構成に合わせて選びます。同じ転送で両ルートを混在させることはできません。
 ゲームボーイとゲームボーイカラーは混在したPCフォルダーから登録できますが、画像取り込みと転送は機種ごとに行います。
 ワンダースワンとワンダースワンカラーも、拡張子により混在フォルダーから振り分けて登録します。
-ネオジオポケットとカラーも、混在したPCフォルダーから拡張子で振り分けます。実機ではConsole Modeの配布設定に合わせ、どちらも `NGPC` を標準ルートに使います。
+ネオジオポケットとカラーは、それぞれの機種でPCのROMフォルダーを登録します。PCフォルダー・Skraperの画像取得設定は機種ごとに保持し、一方の登録でもう一方の設定を変更しません。MiSTerへの転送先は両方とも `NGPC` に固定します。
 
 ## ZIP
 

@@ -39,7 +39,7 @@ workflow.register_folderはGUIとCLIで共有します。workflow.batch_planは�
 
 ## DBと状態
 
-ゲームの一意キーは `(device, system, rom_path)` です。deviceは論理ライブラリ名であり、接続先IPとは独立しています。
+ゲームは `(system, rom_path)` で管理します。旧DBとの互換性のため `device` 列は空文字の固定値で残します。旧ライブラリはバックアップ後に統合し、フォルダー設定は機種単位で保持します。接続先IPは転送時に指定します。
 
 | テーブル | 責務 |
 |---|---|

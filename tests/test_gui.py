@@ -14,6 +14,68 @@ HAS_QT = importlib.util.find_spec('PyQt6') is not None
 
 @unittest.skipUnless(HAS_QT, 'optional GUI dependency PyQt6 is not installed')
 class GUITests(unittest.TestCase):
+    def test_reload_hides_absent_roms_and_restores_metadata_from_configured_folder(self):
+        from gui.app import MainWindow
+        from database.store import Store
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            old, current = root / 'old', root / 'current'
+            old.mkdir()
+            current.mkdir()
+            source = old / 'Game.nes'
+            source.write_bytes(b'rom')
+            image = root / 'Game.png'
+            image.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))
+            db_path = root / 'db'
+            db = Store(db_path)
+            ident = db.register_local_rom('NES', source)
+            db.confirm(ident, '確定名')
+            db.save_artwork(ident, 'test', 'JP', image.as_uri(), image, hashlib.sha256(image.read_bytes()).hexdigest())
+            db.set_setting('workflow/NES', dict(rom_folder=str(current)))
+            db.close()
+            window = MainWindow(db_path)
+            try:
+                self.wait_idle(window)
+                self.assertEqual(window.model.rowCount(), 0)
+                self.assertEqual(window.model.columnCount(), 5)
+                self.assertFalse(window.transfer_button.isEnabled())
+                # Reappearance needs only reload, with no separate registration action.
+                replacement = current / 'Game.nes'
+                replacement.write_bytes(b'rom')
+                window.refresh()
+                self.wait_idle(window)
+                self.assertEqual(window.model.rowCount(), 1)
+                game = window.model.games[0]
+                self.assertEqual(game['id'], ident)
+                self.assertEqual(game['local_rom_path'], str(replacement))
+                self.assertEqual(game['japanese_title'], '確定名')
+                self.assertEqual(game['artwork_path'], str(image))
+                window.model.set_checks([ident], True)
+                self.assertTrue(window.transfer_button.isEnabled())
+                replacement.unlink()
+                image_bytes = image.read_bytes()
+                image.unlink()
+                window.refresh()
+                self.wait_idle(window)
+                self.assertEqual(window.model.rowCount(), 0)
+                self.assertFalse(window.transfer_button.isEnabled())
+                db = Store(db_path)
+                try:
+                    self.assertEqual(db.game(ident)['japanese_title'], '確定名')
+                    self.assertEqual(db.game(ident)['artwork_path'], str(image))
+                    self.assertEqual(len(db.artworks(ident)), 1)
+                finally:
+                    db.close()
+                replacement.write_bytes(b'rom')
+                image.write_bytes(image_bytes)
+                window.refresh()
+                self.wait_idle(window)
+                self.assertEqual(window.model.rowCount(), 1)
+                self.assertEqual(window.model.games[0]['artwork_path'], str(image))
+            finally:
+                self.wait_idle(window)
+                window.close()
+
     def test_transfer_without_checks_never_falls_back_to_all_games(self):
         from gui.app import MainWindow
         from gui.transfer_dialog import TransferDialog
@@ -21,7 +83,7 @@ class GUITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'db'
             db = Store(path)
-            db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            db.upsert_game('/media/fat/games/NES/Game.nes')
             db.close()
             window = MainWindow(path)
             try:
@@ -46,7 +108,7 @@ class GUITests(unittest.TestCase):
             for name in ('Candidate', 'English'):
                 rom = root / (name + '.nes')
                 rom.write_bytes(b'rom')
-                ids.append(db.register_local_rom('test', 'NES', rom))
+                ids.append(db.register_local_rom('NES', rom))
             db.save_candidates(ids[0], [dict(japanese_title='日本語候補', score=.8, reason='タイトル名一致')])
             db.close()
             window = MainWindow(path)
@@ -111,36 +173,6 @@ class GUITests(unittest.TestCase):
             finally:
                 window.close()
 
-    def test_title_database_export_and_merge_are_local_and_do_not_change_confirmation(self):
-        from gui.app import MainWindow
-        from database.store import Store
-        from metadata.title_catalog import read_catalog
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            path = root / 'db'
-            db = Store(path)
-            ident = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
-            db.confirm(ident, 'ゲーム')
-            db.close()
-            window = MainWindow(path)
-            try:
-                self.wait_idle(window)
-                exported, merged = root / 'export.json', root / 'merged.json'
-                with patch('gui.app.QFileDialog.getSaveFileName', return_value=(str(exported), 'JSON')):
-                    window.choose_title_db_export()
-                self.wait_idle(window)
-                self.assertEqual(read_catalog(exported)['entries'][0]['confirmed_titles'], ['ゲーム'])
-                with patch('gui.app.QFileDialog.getOpenFileNames', return_value=([str(exported), str(exported)], 'JSON')), \
-                        patch('gui.app.QFileDialog.getSaveFileName', return_value=(str(merged), 'JSON')):
-                    window.choose_title_db_merge()
-                self.wait_idle(window)
-                self.assertEqual(len(read_catalog(merged)['entries']), 1)
-                db = Store(path)
-                self.assertEqual(db.game(ident)['japanese_title'], 'ゲーム')
-                self.assertEqual(len(db.title_decisions(ident)), 1)
-                db.close()
-            finally:
-                window.close()
 
     def test_grouped_candidates_show_each_source_and_keep_confirmation_explicit(self):
         from gui.app import MainWindow
@@ -149,7 +181,7 @@ class GUITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'db'
             db = Store(path)
-            ident = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            ident = db.upsert_game('/media/fat/games/NES/Game.nes')
             db.save_candidates(ident, [
                 dict(japanese_title='ゲーム Ａ', score=1, provider='retronian', source='retronian-url', license='CC BY-SA 4.0'),
                 dict(japanese_title='ｹﾞｰﾑA', score=1, provider='gamedatabase', source='csv-url', license='CC BY 4.0'),
@@ -160,7 +192,8 @@ class GUITests(unittest.TestCase):
                 self.wait_idle(window)
                 window.show_game(window.proxy.index(0, 0))
                 self.assertEqual(window.title_candidates.count(), 2)  # manual + one grouped title
-                window.title_candidates.setCurrentIndex(1)
+                self.assertEqual(window.title_candidates.currentIndex(), 1)
+                self.assertEqual(window.title_edit.text(), 'ゲーム Ａ')
                 text = window.evidence.toPlainText()
                 self.assertIn('ゲーム Ａ', text)
                 self.assertIn('ｹﾞｰﾑA', text)
@@ -170,7 +203,47 @@ class GUITests(unittest.TestCase):
                 self.assertIn('CC BY 4.0', text)
                 self.assertTrue(window.evidence.isReadOnly())
                 self.assertNotEqual(window.current_game['match_status'], 'confirmed')
+                db = Store(path)
+                try:
+                    self.assertIsNone(db.game(ident)['japanese_title'])
+                    self.assertEqual(db.title_decisions(ident), [])
+                finally:
+                    db.close()
             finally:
+                window.close()
+
+    def test_saved_title_takes_priority_over_default_candidate(self):
+        from gui.app import MainWindow
+        from database.store import Store
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'db'
+            db = Store(path)
+            ident = db.upsert_game('/media/fat/games/NES/Game.nes')
+            db.save_candidates(ident, [dict(japanese_title='先頭候補', score=1), dict(japanese_title='確定名', score=.8)])
+            db.confirm(ident, '確定名')
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                self.assertEqual(window.title_edit.text(), '確定名')
+                self.assertEqual(window.title_candidates.currentData()['japanese_title'], '確定名')
+                db = Store(path)
+                db.confirm(ident, '手入力の確定名')
+                db.close()
+                window.refresh()
+                self.wait_idle(window)
+                self.assertEqual(window.title_candidates.currentIndex(), 0)
+                self.assertEqual(window.title_edit.text(), '手入力の確定名')
+                db = Store(path)
+                db.unconfirm(ident)
+                db.save_candidates(ident, [])
+                db.close()
+                window.refresh()
+                self.wait_idle(window)
+                self.assertEqual(window.title_candidates.currentIndex(), 0)
+                self.assertEqual(window.title_edit.text(), '')
+            finally:
+                self.wait_idle(window)
                 window.close()
 
     def test_added_systems_are_selectable_in_filter_and_registration(self):
@@ -178,7 +251,7 @@ class GUITests(unittest.TestCase):
         from gui.system_choices import SYSTEM_GROUPS
         from systems import SYSTEMS
         from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QComboBox, QDialog
+        from PyQt6.QtWidgets import QComboBox, QDialog, QLabel
         from test_added_systems import ADDITIONS
         with tempfile.TemporaryDirectory() as tmp:
             window = MainWindow(Path(tmp) / 'db')
@@ -200,6 +273,26 @@ class GUITests(unittest.TestCase):
                     self.assertIn(combo.currentData(), SYSTEMS)
                     self.assertEqual([combo.itemData(i) for i in range(combo.count()) if combo.itemData(i)], expected)
                     self.assertEqual(combo.findData('NDS'), -1)
+                    destination = dialog.findChild(QComboBox, 'registrationDestinationChoices')
+                    fixed = dialog.findChild(QLabel, 'registrationDestination')
+                    combo.setCurrentIndex(combo.findData('FDS'))
+                    self.assertTrue(destination.isHidden())
+                    self.assertFalse(fixed.isHidden())
+                    self.assertEqual(fixed.text(), SYSTEMS['FDS'].root)
+                    combo.setCurrentIndex(combo.findData('MD'))
+                    self.assertFalse(destination.isHidden())
+                    self.assertTrue(fixed.isHidden())
+                    self.assertEqual([destination.itemText(i) for i in range(destination.count())],
+                                     list(SYSTEMS['MD'].roots))
+                    combo.setCurrentIndex(combo.findData('FDS'))
+                    self.assertTrue(destination.isHidden())
+                    self.assertEqual(destination.currentText(), SYSTEMS['FDS'].root)
+                    for identifier in ('NGP', 'NGPC'):
+                        combo.setCurrentIndex(combo.findData(identifier))
+                        self.assertTrue(destination.isHidden())
+                        self.assertFalse(fixed.isHidden())
+                        self.assertEqual(fixed.text(), '/media/fat/games/NGPC')
+                        self.assertEqual(destination.count(), 1)
                     for system, _, _ in ADDITIONS:
                         index = combo.findData(system)
                         self.assertGreaterEqual(index, 0)
@@ -222,7 +315,7 @@ class GUITests(unittest.TestCase):
             original.write_bytes(PNG)
             replacement.write_bytes(PNG)
             db = Store(path)
-            game_id = db.upsert_game('test', '/media/fat/games/NES/Game.nes')
+            game_id = db.upsert_game('/media/fat/games/NES/Game.nes')
             db.confirm(game_id, 'ゲーム')
             for image in (original, replacement):
                 db.save_artwork(game_id, 'skraper', 'JP', image.as_uri(), image,
@@ -234,8 +327,8 @@ class GUITests(unittest.TestCase):
                 self.wait_idle(window)
                 self.assertEqual(window.angle, 0)
                 self.assertEqual(window.current_artwork['local_path'], str(replacement))
-                self.assertTrue(window.save_rotation_button.isEnabled())
-                window.save_rotation_button.click()
+                self.assertTrue(window.save_button.isEnabled())
+                window.save_button.click()
                 self.wait_idle(window)
                 db = Store(path)
                 try:
@@ -280,7 +373,7 @@ class GUITests(unittest.TestCase):
             roms.mkdir()
             path = root / 'db'
             db = Store(path)
-            game_id = db.upsert_game('home-mister', '/media/fat/games/SNES/Game.sfc', 'SNES')
+            game_id = db.upsert_game('/media/fat/games/SNES/Game.sfc', 'SNES')
             profile = dict(system='SNES', device='home-mister', rom_folder=str(roms),
                            image_folder=str(root / 'output'))
             db.set_setting('workflow/home-mister/SNES', profile)
@@ -316,7 +409,7 @@ class GUITests(unittest.TestCase):
                 ScreenScraperAccount=dict(Password='secret'))), encoding='utf-8')
             path = root / 'db'
             db = Store(path)
-            db.upsert_game('home-mister', '/media/fat/games/NES/Game.nes')
+            db.upsert_game('/media/fat/games/NES/Game.nes')
             db.set_setting('skraper/folder', str(skraper))
             db.set_setting('workflow/home-mister/NES', dict(system='NES', device='home-mister',
                            rom_folder=str(roms), image_folder='stale'))
@@ -334,11 +427,47 @@ class GUITests(unittest.TestCase):
                 self.assertEqual(shown, [(str(roms), str(roms / 'media' / 'box2dfront'))])
                 db = Store(path)
                 try:
-                    saved = db.setting('workflow/home-mister/NES')
+                    saved = db.setting('workflow/NES')
                 finally:
                     db.close()
                 self.assertEqual(saved['rom_folder'], str(roms))
             finally:
+                window.close()
+
+    def test_registration_uses_legacy_rom_folder_without_library_field(self):
+        from gui.app import MainWindow
+        from database.store import Store
+        from PyQt6.QtWidgets import QDialog, QLineEdit, QCheckBox
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'Game.nes').write_bytes(b'rom')
+            path = root / 'library.sqlite3'
+            db = Store(path)
+            db.set_setting('workflow/home-mister/NES', dict(rom_folder=tmp))
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                window.system.setCurrentIndex(window.system.findData('NES'))
+                def accept(dialog):
+                    folder = dialog.findChild(QLineEdit, 'romFolder')
+                    self.assertEqual(folder.text(), tmp)
+                    self.assertIsNone(dialog.findChild(QLineEdit, 'registrationLibrary'))
+                    self.assertFalse(hasattr(window, 'device'))
+                    dialog.findChild(QCheckBox).setChecked(False)
+                    return QDialog.DialogCode.Accepted
+                with patch.object(QDialog, 'exec', accept), patch('gui.app.QMessageBox.warning') as warning:
+                    window.choose_local_roms()
+                    self.wait_idle(window)
+                    warning.assert_not_called()
+                db = Store(path)
+                try:
+                    self.assertEqual(len(db.games()), 1)
+                    self.assertEqual(db.setting('workflow/NES')['rom_folder'], str(root))
+                finally:
+                    db.close()
+            finally:
+                self.wait_idle(window)
                 window.close()
 
     def test_local_folder_registration_and_rom_only_transfer_dialog(self):
@@ -363,7 +492,7 @@ class GUITests(unittest.TestCase):
                 window.system.setCurrentIndex(window.system.findData('SNES'))
                 def fill_folder(dialog):
                     field = dialog.findChild(QLineEdit, 'romFolder')
-                    self.assertEqual(field.text(), '')
+                    self.assertEqual(field.text(), str(window.rom_folders['SNES']))
                     # The browse button fills the visible path field.
                     with patch('gui.app.QFileDialog.getExistingDirectory', return_value=tmp):
                         next(b for b in dialog.findChildren(QPushButton) if b.text() == '参照').click()
@@ -377,7 +506,7 @@ class GUITests(unittest.TestCase):
                     self.assertEqual(lookup.call_args.args[1][0]['rom_filename'], 'Game.sfc')
                 # An earlier registration is hidden while the folder scope is on, and returns when it is off.
                 other = Store(path)
-                other.upsert_game('home-mister', '/media/fat/games/SNES/Old.sfc', 'SNES')
+                other.upsert_game('/media/fat/games/SNES/Old.sfc', 'SNES')
                 other.close()
                 window.refresh()
                 self.wait_idle(window)
@@ -396,7 +525,7 @@ class GUITests(unittest.TestCase):
                     self.assertEqual(len(games), 1)
                     self.assertEqual(games[0]['rom_path'], '/media/fat/games/SNES/Game.sfc')
                     self.assertEqual(games[0]['local_rom_path'], str(root / 'Game.sfc'))
-                    self.assertEqual(db.setting('workflow/home-mister/SNES')['rom_folder'], str(root))
+                    self.assertEqual(db.setting('workflow/SNES')['rom_folder'], str(root))
                 finally:
                     db.close()
                 def accept(dialog):
@@ -419,7 +548,7 @@ class GUITests(unittest.TestCase):
                 self.assertIn('ROM追加 1本', window.status_label.text())
                 # After a restart the list is still limited to the last registered folder.
                 extra = Store(path)
-                extra.upsert_game('home-mister', '/media/fat/games/SNES/Old.sfc', 'SNES')
+                extra.upsert_game('/media/fat/games/SNES/Old.sfc', 'SNES')
                 extra.close()
                 restarted = MainWindow(path)
                 try:
@@ -493,7 +622,7 @@ class GUITests(unittest.TestCase):
                 db = Store(path)
                 try:
                     placed = {g['rom_filename']: (g['system'], g['rom_path']) for g in db.games()}
-                    workflow = {s: db.setting('workflow/home-mister/' + s)['remote_root'] for s in ('GB', 'GBC')}
+                    workflow = {s: db.setting('workflow/' + s)['remote_root'] for s in ('GB', 'GBC')}
                 finally:
                     db.close()
                 self.assertEqual(placed, {
@@ -506,34 +635,6 @@ class GUITests(unittest.TestCase):
             finally:
                 window.close()
 
-    def test_megadrive_scan_allows_selecting_genesis_root(self):
-        from gui.app import MainWindow
-        from database.store import Store
-        from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / 'library.sqlite3'
-            window = MainWindow(path)
-            def accept(dialog):
-                dialog.findChildren(QLineEdit)[0].setText('192.0.2.10')
-                combos = dialog.findChildren(QComboBox)
-                root = next(c for c in combos if c.findText('/media/fat/games/Genesis') >= 0)
-                root.setCurrentText('/media/fat/games/Genesis')
-                return QDialog.DialogCode.Accepted
-            try:
-                self.wait_idle(window)
-                window.system.setCurrentIndex(window.system.findData('MD'))
-                with patch('gui.app.QDialog.exec', accept), patch('gui.app.FTPReader') as reader:
-                    client = reader.return_value.__enter__.return_value
-                    client.scan.return_value = dict(roms=['/media/fat/games/Genesis/Game.gen'])
-                    window.choose_scan()
-                    self.wait_idle(window)
-                self.assertEqual(client.scan.call_args.args, ('/media/fat/games/Genesis',))
-                db = Store(path)
-                self.assertEqual([g['system'] for g in db.games()], ['MD'])
-                db.close()
-                self.assertEqual(window.proxy.rowCount(), 1)
-            finally:
-                window.close()
 
     def test_system_filter_all_and_import_scope(self):
         from gui.app import MainWindow
@@ -541,14 +642,10 @@ class GUITests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'library.sqlite3'
             db = Store(path)
-            nes = db.upsert_game('home-mister', '/media/fat/games/NES/Game.nes')
-            snes = db.upsert_game('home-mister', '/media/fat/games/SNES/Game.sfc', system='SNES')
+            nes = db.upsert_game('/media/fat/games/NES/Game.nes')
+            snes = db.upsert_game('/media/fat/games/SNES/Game.sfc', system='SNES')
             db.close()
             window = MainWindow(path)
-            captured = []
-            def plan(root, games, **kwargs):
-                captured.extend(games)
-                return dict(ready_count=0, items=[])
             try:
                 self.wait_idle(window)
                 self.assertEqual(window.proxy.rowCount(), 2)
@@ -556,43 +653,12 @@ class GUITests(unittest.TestCase):
                 self.assertEqual([g['id'] for g in window.visible_games()], [snes])
                 window.check_all.click()
                 self.assertEqual(window.model.checked_ids, {snes})
-                with patch('gui.app.QFileDialog.getExistingDirectory', return_value=tmp), patch('gui.app.plan_import', side_effect=plan), patch.object(window, 'open_import_dialog'):
-                    window.choose_import()
-                    self.wait_idle(window)
-                self.assertEqual([g['id'] for g in captured], [snes])
                 window.system.setCurrentIndex(window.system.findData('NES'))
                 self.assertEqual([g['id'] for g in window.visible_games()], [nes])
                 self.assertIn('0 / 1', window.check_count.text())
             finally:
                 window.close()
 
-    def test_scan_registers_snes_using_selected_system(self):
-        from gui.app import MainWindow
-        from database.store import Store
-        from systems import system_profile
-        from PyQt6.QtWidgets import QDialog, QLineEdit
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / 'library.sqlite3'
-            window = MainWindow(path)
-            try:
-                self.wait_idle(window)
-                window.system.setCurrentIndex(window.system.findData('SNES'))
-                def accept(dialog):
-                    dialog.findChildren(QLineEdit)[0].setText('192.0.2.10')
-                    return QDialog.DialogCode.Accepted
-                with patch('gui.app.QDialog.exec', accept), patch('gui.app.FTPReader') as reader:
-                    client = reader.return_value.__enter__.return_value
-                    client.scan.return_value = dict(roms=['/media/fat/games/SNES/Game.sfc'])
-                    window.choose_scan()
-                    self.wait_idle(window)
-                self.assertEqual(client.scan.call_args.args, ('/media/fat/games/SNES',))
-                self.assertEqual(client.scan.call_args.kwargs['extensions'], system_profile('SNES').extensions)
-                db = Store(path)
-                self.assertEqual([g['system'] for g in db.games()], ['SNES'])
-                db.close()
-                self.assertEqual(window.proxy.rowCount(), 1)
-            finally:
-                window.close()
 
     def test_combined_transfer_dialog_defaults_and_single_kind_selection(self):
         from gui.transfer_dialog import TransferDialog
@@ -634,7 +700,7 @@ class GUITests(unittest.TestCase):
             db = Store(path / 'library.sqlite3')
             ids = []
             for name in ['Game', 'Other']:
-                game = db.upsert_game('home-mister', '/media/fat/games/NES/' + name + '.nes')
+                game = db.upsert_game('/media/fat/games/NES/' + name + '.nes')
                 db.confirm(game, '日本語' + name)
                 db.save_artwork(game, 'test', 'JP', png.as_uri(), png, hashlib.sha256(data).hexdigest())
                 ids.append(game)
@@ -661,49 +727,65 @@ class GUITests(unittest.TestCase):
             finally:
                 window.close()
 
-    def test_title_setup_inspection_and_transfer_thread_lifecycle(self):
-        from gui.title_setup import TitleSetup
-        from database.store import Store
-        from PyQt6.QtTest import QTest
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / 'library.sqlite3'
-            db = Store(path)
-            game = db.upsert_game('home-mister', '/media/fat/games/NES/Game.nes')
-            db.confirm(game, 'ゲーム')
-            db.close()
-            dialog = TitleSetup(path)
-            result = dict(host='192.0.2.10', mappings={'Game': 'ゲーム'}, status='inspected',
-                          alias_path='/media/fat/ConsoleMode/themeconfig/alias.txt', font_present=True)
-            def wait():
-                deadline = time.monotonic() + 5
-                while dialog.worker is not None and time.monotonic() < deadline:
-                    self.app.processEvents()
-                    QTest.qWait(10)
-                self.assertIsNone(dialog.worker)
-            try:
-                self.assertFalse(dialog.transfer_button.isEnabled())
-                dialog.password.setText('not-persisted')
-                with patch('gui.title_setup.inspect_settings', return_value=result):
-                    dialog.inspect()
-                    wait()
-                self.assertTrue(dialog.transfer_button.isEnabled())
-                self.assertEqual(dialog.password.text(), 'not-persisted')
-                with patch('gui.title_setup.transfer_titles', return_value=dict(status='verified', count=1, report='test-report')):
-                    dialog.show()
-                    dialog.transfer()
-                    dialog.reject()
-                    self.assertTrue(dialog.isVisible())
-                    wait()
-                self.assertEqual(dialog.password.text(), '')
-                self.assertFalse(dialog.transfer_button.isEnabled())
-                self.assertIn('1本の別名を転送', dialog.result.toPlainText())
-            finally:
-                dialog.close()
 
     @classmethod
     def setUpClass(cls):
         from PyQt6.QtWidgets import QApplication
         cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.rom_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.rom_directory.cleanup)
+        self.rom_root = Path(self.rom_directory.name) / 'work' / 'Roms'
+        root_patch = patch('gui.app.ROM_ROOT', self.rom_root)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
+
+    def test_startup_creates_rom_folders_and_registration_uses_system_defaults(self):
+        from gui.app import MainWindow
+        from database.store import Store
+        from systems import SYSTEMS
+        from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'db'
+            external = Path(tmp) / 'external-roms'
+            external.mkdir()
+            db = Store(path)
+            db.set_setting('workflow/NES', dict(rom_folder=str(external)))
+            db.close()
+            window = MainWindow(path)
+            try:
+                self.wait_idle(window)
+                self.assertEqual({p.name for p in self.rom_root.iterdir() if p.is_dir()}, set(SYSTEMS))
+                marker = self.rom_root / 'NGP' / 'existing.ngp'
+                marker.write_bytes(b'existing-rom')
+                def inspect(dialog):
+                    system = dialog.findChild(QComboBox, 'registrationSystem')
+                    folder = dialog.findChild(QLineEdit, 'romFolder')
+                    system.setCurrentIndex(system.findData('NGP'))
+                    self.assertEqual(folder.text(), str(self.rom_root / 'NGP'))
+                    system.setCurrentIndex(system.findData('NGPC'))
+                    self.assertEqual(folder.text(), str(self.rom_root / 'NGPC'))
+                    system.setCurrentIndex(system.findData('NES'))
+                    self.assertEqual(folder.text(), str(external))
+                    system.setCurrentIndex(system.findData('FDS'))
+                    self.assertEqual(folder.text(), str(self.rom_root / 'FDS'))
+                    with patch('gui.app.QFileDialog.getExistingDirectory', return_value=str(external)):
+                        next(b for b in dialog.findChildren(QPushButton) if b.text() == '参照').click()
+                    self.assertEqual(folder.text(), str(external))
+                    return QDialog.DialogCode.Rejected
+                with patch.object(QDialog, 'exec', inspect):
+                    window.choose_local_roms()
+            finally:
+                self.wait_idle(window)
+                window.close()
+            restarted = MainWindow(path)
+            try:
+                self.wait_idle(restarted)
+                self.assertEqual(marker.read_bytes(), b'existing-rom')
+            finally:
+                self.wait_idle(restarted)
+                restarted.close()
 
     def wait_idle(self, window):
         from PyQt6.QtTest import QTest
@@ -724,7 +806,7 @@ class GUITests(unittest.TestCase):
             data = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
             png.write_bytes(data)
             db = Store(path / 'library.sqlite3')
-            game = db.upsert_game('test-device', '/games/NES/Game.nes')
+            game = db.upsert_game('/games/NES/Game.nes')
             db.save_candidates(game, [dict(japanese_title='日本語候補', score=1,
                                            reason='alias exact', source='test')])
             db.save_artwork(game, 'skraper', 'JP', png.as_uri(), png, hashlib.sha256(data).hexdigest(), select=False)
@@ -741,16 +823,14 @@ class GUITests(unittest.TestCase):
                 self.assertEqual(png.read_bytes(), data)
                 window.title_candidates.setCurrentIndex(1)
                 self.assertEqual(window.title_edit.text(), '日本語候補')
-                window.confirm_title()
+                window.save_button.click()
                 self.wait_idle(window)
                 db = Store(path / 'library.sqlite3')
                 self.assertEqual(db.game(game)['match_status'], 'confirmed')
-                self.assertIsNone(db.game(game)['artwork_path'])
-                db.close()
-                window.select_artwork()
-                self.wait_idle(window)
-                db = Store(path / 'library.sqlite3')
-                self.assertEqual(db.game(game)['artwork_path'], str(png))
+                self.assertEqual(db.game(game)['japanese_title'], '日本語候補')
+                self.assertNotEqual(db.game(game)['artwork_path'], str(png))
+                self.assertEqual(window.current_artwork['rotation_degrees'], 90)
+                self.assertEqual(png.read_bytes(), data)
                 self.assertEqual(db.game(game)['sync_status'], 'blocked')
                 db.close()
                 window.pending_only.setChecked(True)
@@ -774,24 +854,31 @@ class GUITests(unittest.TestCase):
                 window.close()
                 self.app.processEvents()
 
-    def test_all_checkbox_is_visible_only_and_batch_approval_is_explicit(self):
+    def test_three_step_workflow_and_checks_select_transfer_targets_only(self):
         from gui.app import MainWindow
         from database.store import Store
         from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QDialog, QCheckBox
+        from PyQt6.QtWidgets import QDialog, QPushButton
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             db = Store(root / 'db.sqlite3')
             ids = []
             for name in ('Alpha', 'Beta'):
-                game = db.upsert_game('test', '/games/NES/' + name + '.nes')
+                game = db.upsert_game('/media/fat/games/NES/' + name + '.nes')
                 db.save_candidates(game, [dict(japanese_title=name + '日本語', score=1)])
                 ids.append(game)
             db.close()
             window = MainWindow(root / 'db.sqlite3')
             try:
                 self.wait_idle(window)
-                self.assertFalse(window.approve_button.isEnabled())
+                steps = [button for button in window.findChildren(QPushButton)
+                         if button.text().startswith(('1 ·', '2 ·', '3 ·', '4 ·'))]
+                self.assertEqual([button.text() for button in steps],
+                                 ['1 · PCのROMを登録', '2 · Skraperで画像取得・取り込み', '3 · MiSTerへ転送'])
+                self.assertTrue(all(button.objectName() != 'primary' for button in steps))
+                self.assertFalse(hasattr(window, 'advanced_button'))
+                self.assertTrue(window.recovery_button.isHidden())
+                self.assertFalse(window.transfer_button.isEnabled())
                 window.check_all.click()
                 self.assertEqual(window.model.checked_ids, set(ids))
                 self.assertEqual(window.check_all.checkState(), Qt.CheckState.Checked)
@@ -809,27 +896,10 @@ class GUITests(unittest.TestCase):
                 window.check_all.click()
                 # Canceling does not approve anything.
                 with patch.object(QDialog, 'exec', return_value=QDialog.DialogCode.Rejected):
-                    window.approve_checked()
+                    window.choose_transfer()
                 db = Store(root / 'db.sqlite3')
                 try:
                     self.assertTrue(all(g['match_status'] == 'review' for g in db.games()))
-                finally:
-                    db.close()
-                def accept(dialog):
-                    boxes = dialog.findChildren(QCheckBox)
-                    self.assertEqual(len(boxes), 3)
-                    # A single spelling is shown for explicit review without another opt-in checkbox.
-                    self.assertTrue(next(b for b in boxes if '名前一致のみ' in b.text()).isChecked())
-                    self.assertTrue(all(b.parentWidget().isHidden() for b in boxes))
-                    return QDialog.DialogCode.Accepted
-                with patch.object(QDialog, 'exec', accept):
-                    window.approve_checked()
-                self.wait_idle(window)
-                db = Store(root / 'db.sqlite3')
-                try:
-                    self.assertEqual(db.game(ids[0])['match_status'], 'confirmed')
-                    self.assertEqual(db.game(ids[1])['match_status'], 'review')
-                    self.assertEqual(db.game(ids[0])['sync_status'], 'blocked')
                 finally:
                     db.close()
                 self.assertIn(ids[0], window.model.checked_ids)
@@ -853,7 +923,7 @@ class GUITests(unittest.TestCase):
             image.save(str(source), 'PNG')
             original = source.read_bytes()
             db = Store(root / 'db.sqlite3')
-            game_id = db.upsert_game('test', '/games/NES/Game.nes')
+            game_id = db.upsert_game('/games/NES/Game.nes')
             db.confirm(game_id, '確定名')
             db.save_artwork(game_id, 'skraper', 'JP', source.as_uri(), source,
                             hashlib.sha256(original).hexdigest())
@@ -862,8 +932,8 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 window.rotate(90)
-                self.assertTrue(window.save_rotation_button.isEnabled())
-                window.save_rotation()
+                self.assertTrue(window.save_button.isEnabled())
+                window.save_game()
                 self.wait_idle(window)
                 self.assertEqual(window.current_artwork['rotation_degrees'], 90)
                 corrected = Path(window.current_artwork['local_path'])
@@ -879,11 +949,11 @@ class GUITests(unittest.TestCase):
                 finally:
                     db.close()
                 with patch.object(QMessageBox, 'question', return_value=QMessageBox.StandardButton.Yes):
-                    window.select_artwork()
+                    window.save_game()
                 self.wait_idle(window)
                 self.assertEqual(window.current_artwork['local_path'], str(corrected))
                 self.assertEqual(window.angle, 0)
-                self.assertTrue(window.save_rotation_button.isEnabled())
+                self.assertTrue(window.save_button.isEnabled())
                 window.refresh()
                 self.wait_idle(window)
                 self.assertEqual(window.current_artwork['local_path'], str(corrected))
@@ -897,7 +967,7 @@ class GUITests(unittest.TestCase):
         from gui.app import MainWindow
         from artwork.skraper_import import plan_import
         from database.store import Store
-        from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit
+        from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QLabel, QPlainTextEdit
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             images = root / 'images'
@@ -905,7 +975,7 @@ class GUITests(unittest.TestCase):
             (images / 'Game.nes.png').write_bytes(b'invalid')
             (images / 'Game.png').write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))
             db = Store(root / 'db.sqlite3')
-            game = db.upsert_game('test-device', '/games/NES/Game.nes')
+            game = db.upsert_game('/games/NES/Game.nes')
             games = db.games()
             db.close()
             window = MainWindow(root / 'db.sqlite3')
@@ -913,7 +983,14 @@ class GUITests(unittest.TestCase):
                 self.wait_idle(window)
                 def accept(dialog):
                     regions = dialog.findChild(QComboBox)
+                    summary = dialog.findChild(QLabel, 'importRegionSummary')
+                    report = dialog.findChild(QPlainTextEdit)
+                    original_report = report.toPlainText()
+                    self.assertIn('1件の画像候補へ「不明（初期値）」', summary.text())
                     regions.setCurrentIndex(regions.findData('JP'))
+                    self.assertIn('1件の画像候補へ「日本 / JP」', summary.text())
+                    self.assertIn('画像や取り込み対象は変わりません', summary.text())
+                    self.assertEqual(report.toPlainText(), original_report)
                     return QDialog.DialogCode.Accepted
                 with patch.object(QDialog, 'exec', accept):
                     window.start_task(lambda cancelled, progress: plan_import(images, games,
@@ -924,6 +1001,7 @@ class GUITests(unittest.TestCase):
                     self.assertEqual(len(db.artworks(game)), 1)
                     self.assertEqual(db.artworks(game)[0]['region'], 'JP')
                     self.assertIsNone(db.game(game)['artwork_path'])
+                    self.assertIn('画像地域: JP', window.status_label.text())
                 finally:
                     db.close()
             finally:
@@ -938,7 +1016,8 @@ class GUITests(unittest.TestCase):
         from PyQt6.QtWidgets import QDialog, QLineEdit, QPlainTextEdit, QCheckBox
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            report = root / 'transfer.json'
+            report = root / 'transfer-backups' / ('a' * 32) / 'transfer.json'
+            report.parent.mkdir(parents=True)
             report.write_text(json.dumps(dict(schema='mister-jp-transfer/v2',
                 run_id='a' * 32, host='test-host', status='rollback_failed', items=[dict(
                     kind='rom', system='NES', remote_path='/media/fat/games/NES/Game.nes',
@@ -946,7 +1025,8 @@ class GUITests(unittest.TestCase):
             window = MainWindow(root / 'db')
             try:
                 self.wait_idle(window)
-                self.assertIn('転送記録から復旧', [a.text() for a in window.advanced_button.menu().actions()])
+                self.assertFalse(window.recovery_button.isHidden())
+                self.assertEqual(window.recovery_reports, [str(report)])
                 def accept(dialog):
                     self.assertIn('/media/fat/games/NES/Game.nes', dialog.findChild(QPlainTextEdit).toPlainText())
                     fields = dialog.findChildren(QLineEdit)
@@ -958,7 +1038,7 @@ class GUITests(unittest.TestCase):
                         'gui.app.recover_transfer', return_value=dict(
                             recovered=True, report=str(report), status='rolled_back')) as recover, patch(
                         'gui.app.QMessageBox.information'):
-                    window.choose_recovery()
+                    window.recovery_button.click()
                     self.wait_idle(window)
                 recover.assert_called_once_with(str(report), 'test-host', 'root', 'secret')
                 self.assertIn('復旧しました', window.status_label.text())

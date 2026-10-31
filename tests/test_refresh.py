@@ -18,7 +18,7 @@ class RefreshTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_recheck_proposes_changed_title_without_applying_it(self):
-        game = self.db.upsert_game('test', '/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
+        game = self.db.upsert_game('/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
         self.db.confirm(game, '旧名')
         loader = lambda system, root, **kw: ([record(title='新名')], 'download')
         plain = match_titles(self.db, self.db.games(), self.tmp.name, loader=loader)
@@ -34,7 +34,7 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual(self.db.game(game)['japanese_title'], '新名')
 
     def test_recheck_ignores_matching_or_ambiguous_titles(self):
-        game = self.db.upsert_game('test', '/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
+        game = self.db.upsert_game('/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
         self.db.confirm(game, '同じ')
         same = lambda system, root, **kw: ([record(title='同じ')], 'cache')
         self.assertEqual(match_titles(self.db, self.db.games(), self.tmp.name, loader=same,
@@ -44,7 +44,7 @@ class RefreshTests(unittest.TestCase):
                                       recheck_confirmed=True)['updates'], [])
 
     def test_unconfirm_keeps_candidates_and_allows_rematch(self):
-        game = self.db.upsert_game('test', '/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
+        game = self.db.upsert_game('/media/fat/games/SNES/Game (Japan).sfc', 'SNES')
         self.db.confirm(game, '旧名')
         self.db.unconfirm(game)
         row = self.db.game(game)
@@ -60,7 +60,7 @@ class RefreshTests(unittest.TestCase):
         self.assertEqual([a['source'] for a in self.db.aliases()], ['keep'])
 
     def test_reimported_source_makes_rotated_copy_stale_and_newer_image_is_flagged(self):
-        game = self.db.upsert_game('test', '/media/fat/games/NES/Game (Japan).nes')
+        game = self.db.upsert_game('/media/fat/games/NES/Game (Japan).nes')
         self.db.save_artwork(game, 'skraper', 'JP', 'file:///a.png', 'a.png', 'h1')
         art = self.db.artworks(game)[0]
         self.db.db.execute('INSERT INTO artworks(game_id,source,region,url,local_path,sha256) VALUES(?,?,?,?,?,?)',

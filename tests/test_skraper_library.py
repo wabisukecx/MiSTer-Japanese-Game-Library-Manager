@@ -33,7 +33,7 @@ class LibraryTests(unittest.TestCase):
             image.write_bytes(PNG)
             db = Store(root / 'db')
             try:
-                game = db.upsert_game('d', '/media/fat/games/NES/Game.nes')
+                game = db.upsert_game('/media/fat/games/NES/Game.nes')
                 # Imported before the library existed and already selected.
                 db.save_artwork(game, 'skraper', 'JP', image.resolve().as_uri(), image.resolve(),
                                 hashlib.sha256(PNG).hexdigest())

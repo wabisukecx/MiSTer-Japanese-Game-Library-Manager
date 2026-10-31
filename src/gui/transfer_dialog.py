@@ -55,7 +55,7 @@ class TransferDialog(QDialog):
         self.titles.setEnabled(bool(titles))
         advanced_layout.addWidget(self.images)
         advanced_layout.addWidget(self.titles)
-        note = QLabel('転送は機種ルート直下のみ対応です。未配置ROM→画像→日本語名の順に反映します。\n既存ROMは上書きしません。任意で内容を照合できます。別名は実機のゲームフォルダー全体で衝突を検査します。\n中断・エラー時は反映済みファイルの復旧を試みます。通信断・外部変更で復旧できない場合は、詳細機能の「転送記録から復旧」を使います。')
+        note = QLabel('転送は機種ルート直下のみ対応です。未配置ROM→画像→日本語名の順に反映します。\n既存ROMは上書きしません。任意で内容を照合できます。別名は実機のゲームフォルダー全体で衝突を検査します。\n中断・エラー時は反映済みファイルの復旧を試みます。復旧が必要な場合は、メイン画面に「転送を復旧」が表示されます。')
         note.setWordWrap(True)
         advanced_layout.addWidget(note)
         self.remember = remember_checkbox()

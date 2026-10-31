@@ -26,7 +26,7 @@ Console Mode・Skraper・ROMは本ツールに同梱していません。
 
 日本語名の反映には、実機の `/media/fat/ConsoleMode/config.ini` に別名ファイルの保存先 `GLOBAL.aliasPath` が設定され、
 `/media/fat/ConsoleMode/fonts/NotoSansCJK-Regular.otf` が存在する必要があります。
-本ツールの「詳細機能 → 日本語タイトル設定」で確認できます。未設定・未配置なら、Console Mode側の準備を済ませてから転送します。
+転送時に設定とフォントを確認します。未設定・未配置なら、Console Mode側の準備を済ませてから転送します。
 
 ## 2. FTPで接続できることを確認する
 
@@ -72,19 +72,20 @@ IPはConsole Modeの「Home → Settings → Sound & Connectivity → Network」
 
 ## 5. ROMと画像取得先を設定する
 
-1. PCのROMフォルダーを機種ごとに用意します。[対応機種とROM形式](systems.md)を確認してください。
-2. Skraperで対象機種を追加し、Games/Roms folderにそのROMフォルダーを指定します。
-3. 画像取得対象をパッケージ正面（BOX 2D）にし、PNG形式の出力先を確認します。日本版を使う場合は地域を日本に設定します。
+1. PCのROMフォルダーを機種ごとに用意します。標準はプロジェクト内の `work/Roms/<機種ID>/` です。[対応機種とROM形式](systems.md)を確認してください。
+2. Skraperで対象機種を追加し、Games & Front-End → Games/Roms folderにそのROMフォルダーを指定します。
+3. Mediaで画像取得対象をIMAGE / BOX 2D（パッケージ正面）にし、PNG形式のOutput folderを指定します。標準の画像出力先はROMフォルダー内の `media/box2dfront/` です。日本版だけを取得する場合は地域をJPのみとし、ROM地域優先をOFFにします。
 4. 少数のROMで取得を試し、ROMと同じ基本名のPNGが出力されることを確認します。
 
 ネオジオの `.neo` は、SkraperのNeo Geoの対象拡張子に追加してください。この設定で画像取得と、MiSTerへの転送後の実機プレイまで確認済みです。
 
 ゲームボーイとゲームボーイカラーは、本ツールには同じPCフォルダーから登録できますが、Skraperの設定・画像取り込み・転送はそれぞれの機種で行います。
 本ツールは画像のファイル名でROMと対応付けます。同名の画像が複数ある場合は、取り込む出力先を整理します。
+Skraperで取得が完了したら本ツールへ戻り、「取得画像を取り込む」を押します。画像は管理用フォルダーへコピーされ、元の出力フォルダーとは別に保存されます。ROM・画像のフォルダー設定は機種ごとに記憶します。
 
 ## 6. 本ツールで作業を始める
 
 [READMEのインストール手順](../README.md#本ツールのインストール)で本ツールを導入します。
-GUIでは「PCのROMを登録 → Skraperで画像取得・取り込み → 名前・画像の承諾 → MiSTerへまとめて転送」の順に進めます。[GUIの操作](gui.md)
+GUIでは「PCのROMを登録 → Skraperで画像取得・取り込み → MiSTerへ転送」の順に進めます。名前や画像の向きは、一覧でゲームを選び、右側で調整して保存します。[GUIの操作](gui.md)
 
 既に取得済みのPNGを取り込む操作ではSkraperの再取得は不要です。名前だけを整備する場合やCLIの別の画像取得手段を使う場合は、利用する機能に合わせて準備してください。

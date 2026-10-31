@@ -22,7 +22,7 @@ class WorkflowTests(unittest.TestCase):
             (images / 'Game (Japan).png').write_bytes(PNG)
             db = Store(root / 'db')
             try:
-                game_id = db.register_local_rom('test', 'SNES', source)
+                game_id = db.register_local_rom('SNES', source)
                 def loader(system, path, **kwargs):
                     self.assertEqual(system, 'SNES')
                     return [dict(id='game', roms=[dict(name=source.stem)], titles=[dict(

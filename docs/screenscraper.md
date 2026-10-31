@@ -24,7 +24,7 @@ GUIのSkraper取り込みとは別経路です。通常のSkraperの準備とユ
 先にROMを登録し、listでローカルのゲームIDを確認します。
 
 ```powershell
-mister-jp-library list --device living-room
+mister-jp-library list
 mister-jp-library screenscraper-search 1
 mister-jp-library screenscraper-download 1 --provider-game-id 1234
 ```
