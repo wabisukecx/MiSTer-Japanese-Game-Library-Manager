@@ -43,7 +43,7 @@ MiSTerのFTPは標準で動作しており、[MiSTer公式ドキュメント（A
 
 **`192.0.2.10` は例示用のIPです。そのまま入力せず、必ず自分のMiSTerのIPアドレスに置き換えてください。**
 IPはConsole Modeの「Home → Settings → Sound & Connectivity → Network」で確認できます。Console Modeを使えない場合は、MiSTerの起動メニューでF9キーを押してLinuxターミナルを開き、`root` でログインして `ip addr` を実行すると、`eth0` の `inet` 行で確認できます（[公式ドキュメント](https://mister-devel.github.io/MkDocs_MiSTer/advanced/network/)）。ルーターの接続機器一覧でも確認できます。
-ユーザー名も自分の値に置き換えます。FTPパスワードは実行時に入力し、本ツールは保存しません。
+ユーザー名も自分の値に置き換えます。GUIでは、接続ダイアログでIPとユーザーを次回から自動入力します。パスワードは「パスワードを保存する」を選んだ場合だけ、Windowsのアカウントで暗号化して保存します（[データ管理](data.md#認証と公開範囲)）。CLIは実行時に入力し、保存しません。
 
 ## 3. PCにSkraperを用意する
 

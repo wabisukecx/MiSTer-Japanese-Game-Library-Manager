@@ -7,6 +7,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QPlainTextEdit
 
 from database.store import Store
+from .connection import prefill, commit, remember_checkbox
 from consolemode.titles import title_mapping, inspect_settings, transfer_titles
 
 
@@ -37,6 +38,7 @@ class TitleSetup(QDialog):
         super().__init__(parent)
         self.setWindowTitle('Console Mode 日本語タイトルの確認と転送')
         self.resize(740, 570)
+        self.db_path = db_path
         self.output = Path(db_path).parent / 'title-setup'
         db = Store(db_path)
         try:
@@ -51,9 +53,12 @@ class TitleSetup(QDialog):
         layout.addWidget(QLabel('①実機設定を確認 → ②既存の別名をバックアップして日本語名を転送\nROM・画像・設定・フォントは変更しません。転送後はConsole Modeを再起動して表示を確認します。'))
         self.host, self.user, self.password = QLineEdit(), QLineEdit('root'), QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        for title, field in [('MiSTer IP', self.host), ('FTPユーザー', self.user), ('FTPパスワード（保存しません）', self.password)]:
+        for title, field in [('MiSTer IP', self.host), ('FTPユーザー', self.user), ('FTPパスワード', self.password)]:
             layout.addWidget(QLabel(title))
             layout.addWidget(field)
+        self.remember = remember_checkbox()
+        layout.addWidget(self.remember)
+        prefill(db_path, self.host, self.user, self.password, self.remember)
         self.button = QPushButton('接続して設定を確認')
         self.button.clicked.connect(self.inspect)
         layout.addWidget(self.button)
@@ -78,8 +83,9 @@ class TitleSetup(QDialog):
         if self.worker is not None:
             return
         credentials = [self.host.text().strip(), self.user.text().strip(), self.password.text()]
+        commit(self.db_path, *credentials, self.remember.isChecked())
         self.inspection = None
-        for field in (self.host, self.user, self.password, self.button, self.transfer_button): field.setEnabled(False)
+        for field in (self.host, self.user, self.password, self.remember, self.button, self.transfer_button): field.setEnabled(False)
         self.result.setPlainText('実機の設定を読み取り中…')
         self.worker = Probe(credentials, self.mapping, self.output, self, title_targets=self.title_targets)
         self.worker.completed.connect(self.done_inspecting)
@@ -91,7 +97,7 @@ class TitleSetup(QDialog):
             return
         credentials = [self.host.text().strip(), self.user.text().strip(), self.password.text()]
         self.password.clear()
-        for field in (self.host, self.user, self.password, self.button, self.transfer_button): field.setEnabled(False)
+        for field in (self.host, self.user, self.password, self.remember, self.button, self.transfer_button): field.setEnabled(False)
         self.result.setPlainText('別名ファイルをバックアップして転送中…')
         self.worker = Probe(credentials, self.mapping, self.output, self, inspection=self.inspection)
         self.worker.completed.connect(self.done_transfer)
@@ -101,7 +107,7 @@ class TitleSetup(QDialog):
     def finished_inspecting(self):
         self.worker.deleteLater()
         self.worker = None
-        for field in (self.host, self.user, self.password, self.button): field.setEnabled(True)
+        for field in (self.host, self.user, self.password, self.remember, self.button): field.setEnabled(True)
 
     def done_inspecting(self, result):
         ready = (result['status'] == 'inspected' and result.get('alias_path')

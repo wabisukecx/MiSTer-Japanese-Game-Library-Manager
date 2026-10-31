@@ -25,6 +25,7 @@ from workflow import register_folder, batch_plan
 from mister.recovery import recover_transfer, validate_journal
 from mister.artwork_transfer import transfer_images
 from .transfer_dialog import TransferDialog
+from .connection import prefill, commit, remember_checkbox
 from .system_choices import populate_systems
 from systems import SYSTEMS, system_profile
 from mister.ftp_client import FTPReader
@@ -475,7 +476,7 @@ class MainWindow(QMainWindow):
         except (ValueError, OSError) as error:
             QMessageBox.warning(self, '転送内容を確認', str(error))
             return
-        dialog = TransferDialog(items, titles, self, roms=roms)
+        dialog = TransferDialog(items, titles, self, roms=roms, db_path=self.db_path)
         profile = system_profile(targets[0]['system'])
         dialog.setWindowTitle(profile.name + ' · ROM・画像・日本語名を転送' + ('（実機未検証）' if not profile.verified else ''))
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -486,6 +487,7 @@ class MainWindow(QMainWindow):
         roms = roms if dialog.roms.isChecked() else []
         verify_roms = dialog.verify_roms.isChecked()
         credentials = [dialog.host.text().strip(), dialog.user.text().strip(), dialog.password.text()]
+        commit(self.db_path, *credentials, dialog.remember.isChecked())
         dialog.password.clear()
         if not items and not titles and not roms:
             return
@@ -529,9 +531,12 @@ class MainWindow(QMainWindow):
         host = QLineEdit(journal['host'])
         user, password = QLineEdit('root'), QLineEdit()
         password.setEchoMode(QLineEdit.EchoMode.Password)
-        for title, field in [('MiSTer IP（記録と同じ実機）', host), ('FTPユーザー', user), ('FTPパスワード（保存しません）', password)]:
+        for title, field in [('MiSTer IP（記録と同じ実機）', host), ('FTPユーザー', user), ('FTPパスワード', password)]:
             layout.addWidget(label(title))
             layout.addWidget(field)
+        remember = remember_checkbox()
+        layout.addWidget(remember)
+        prefill(self.db_path, host, user, password, remember, only_host=journal['host'])
         preview = QPlainTextEdit()
         preview.setReadOnly(True)
         preview.setPlainText('\n'.join(row['remote_path'] + ' / ' + row['status'] for row in journal['items']))
@@ -545,6 +550,7 @@ class MainWindow(QMainWindow):
             password.clear()
             return
         credentials = [host.text().strip(), user.text().strip(), password.text()]
+        commit(self.db_path, *credentials, remember.isChecked(), only_host=journal['host'])
         password.clear()
         def operation(cancelled, progress):
             try:
@@ -819,10 +825,14 @@ class MainWindow(QMainWindow):
             root.addItems(system_profile(system.currentData()).roots)
         system.currentIndexChanged.connect(update_roots)
         update_roots()
-        for title, field in [('MiSTer IP', host), ('FTPユーザー', user), ('FTPパスワード（保存しません）', password),
+        for title, field in [('MiSTer IP', host), ('FTPユーザー', user), ('FTPパスワード', password),
                              ('ライブラリ名', device), ('機種', system), ('ROMフォルダー', root)]:
             layout.addWidget(label(title))
             layout.addWidget(field)
+            if field is password:
+                remember = remember_checkbox()
+                layout.addWidget(remember)
+        prefill(self.db_path, host, user, password, remember)
         layout.addWidget(label('ROMの内容は取得せず、ファイル名をPCの一覧へ登録します。\n転送は機種ルート直下のみ対応です。子フォルダーの項目は一覧登録だけに使えます。'))
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText('一覧を取得')
@@ -837,6 +847,7 @@ class MainWindow(QMainWindow):
         rom_root = root.currentText()
         device_name = device.text().strip()
         credentials = [host.text().strip(), user.text().strip(), password.text()]
+        commit(self.db_path, *credentials, remember.isChecked())
         password.clear()
         if not credentials[0] or not credentials[1] or not device_name:
             QMessageBox.warning(self, '接続先', 'IP・ユーザー・ライブラリ名を入力してください。')
@@ -981,8 +992,10 @@ class MainWindow(QMainWindow):
         titles.setChecked(True)
         images = QCheckBox('画像候補を採用する（補正済み画像があれば優先）')
         images.setChecked(True)
+        weak = QCheckBox('名前一致のみの候補も含める（単一候補のみ。地域・版は未照合なので一覧を確認してください）')
         layout.addWidget(titles)
         layout.addWidget(images)
+        layout.addWidget(weak)
         report = QPlainTextEdit()
         report.setReadOnly(True)
         layout.addWidget(report, 1)
@@ -994,12 +1007,14 @@ class MainWindow(QMainWindow):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
         def preview():
+            plan[:] = approval_plan(games, include_weak=weak.isChecked())
             lines = []
             for item in plan:
                 title = item['title'] if titles.isChecked() else None
                 artwork = item['artwork'] if images.isChecked() else None
                 lines.append('%s\n  日本語名: %s\n  画像: %s\n' % (item['rom_filename'],
-                    title or (item['title_note'] if titles.isChecked() else '変更しない'),
+                    (title + ('（名前一致のみ）' if item['weak'] else '') if title else
+                     (item['title_note'] if titles.isChecked() else '変更しない')),
                     (Path(artwork['local_path']).name + ' / ' + item['image_note']) if artwork else
                     (item['image_note'] if images.isChecked() else '変更しない')))
             report.setPlainText('\n'.join(lines))
@@ -1009,6 +1024,7 @@ class MainWindow(QMainWindow):
             buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(title_count + image_count > 0)
         titles.toggled.connect(preview)
         images.toggled.connect(preview)
+        weak.toggled.connect(preview)
         preview()
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return

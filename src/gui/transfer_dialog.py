@@ -4,9 +4,11 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
 )
 
+from .connection import prefill, remember_checkbox
+
 
 class TransferDialog(QDialog):
-    def __init__(self, items, titles, parent=None, *, roms=None):
+    def __init__(self, items, titles, parent=None, *, roms=None, db_path=None):
         super().__init__(parent)
         self.items, self.mapping = items, titles
         self.rom_items = roms or []
@@ -33,9 +35,13 @@ class TransferDialog(QDialog):
         layout.addWidget(note)
         self.host, self.user, self.password = QLineEdit(), QLineEdit('root'), QLineEdit()
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        for title, field in [('MiSTer IP', self.host), ('FTPユーザー', self.user), ('FTPパスワード（保存しません）', self.password)]:
+        for title, field in [('MiSTer IP', self.host), ('FTPユーザー', self.user), ('FTPパスワード', self.password)]:
             layout.addWidget(QLabel(title))
             layout.addWidget(field)
+        self.remember = remember_checkbox()
+        layout.addWidget(self.remember)
+        if db_path is not None:
+            prefill(db_path, self.host, self.user, self.password, self.remember)
         self.summary = QLabel()
         layout.addWidget(self.summary)
         self.preview = QPlainTextEdit()
