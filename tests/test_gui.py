@@ -756,14 +756,15 @@ class GUITests(unittest.TestCase):
             window = MainWindow(path)
             try:
                 self.wait_idle(window)
-                self.assertEqual({p.name for p in self.rom_root.iterdir() if p.is_dir()}, set(SYSTEMS))
-                marker = self.rom_root / 'NGP' / 'existing.ngp'
+                self.assertEqual({p.name for p in self.rom_root.iterdir() if p.is_dir()},
+                                 {p.rom_folder_name for p in SYSTEMS.values()})
+                marker = self.rom_root / 'NGPC' / 'existing.ngp'
                 marker.write_bytes(b'existing-rom')
                 def inspect(dialog):
                     system = dialog.findChild(QComboBox, 'registrationSystem')
                     folder = dialog.findChild(QLineEdit, 'romFolder')
                     system.setCurrentIndex(system.findData('NGP'))
-                    self.assertEqual(folder.text(), str(self.rom_root / 'NGP'))
+                    self.assertEqual(folder.text(), str(self.rom_root / 'NGPC'))
                     system.setCurrentIndex(system.findData('NGPC'))
                     self.assertEqual(folder.text(), str(self.rom_root / 'NGPC'))
                     system.setCurrentIndex(system.findData('NES'))

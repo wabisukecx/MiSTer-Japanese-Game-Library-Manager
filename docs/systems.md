@@ -1,6 +1,6 @@
 # 対応機種とROM形式
 
-本文とGUIでは日本語の機種名を使います。CLIの `--system`、DB、フォルダー名では下表の機種IDを使います。たとえばゲームボーイカラーは、CLIでは `--system GBC` と指定します。
+本文とGUIでは日本語の機種名を使います。CLIの `--system` とDBでは下表の機種IDを使います。たとえばゲームボーイカラーは、CLIでは `--system GBC` と指定します。PCの既定ROMフォルダーは、MiSTerの標準ROMルート末尾と同じ名前です（例: `MD` → `work/Roms/MegaDrive/`、`PS1` → `work/Roms/PSX/`）。複数ルートのある機種は、表の先頭のルート名を使います。
 
 | 機種名 | 機種ID | MiSTerのROMルート | 通常ROMの拡張子 |
 |---|---|---|---|
@@ -44,6 +44,8 @@ CHD・.neo・N64のバイト順違いなど、DBのROMと内容が異なる形�
 ## フォルダーの扱い
 
 PC側の登録はサブフォルダーを探索し、MiSTerへの転送は機種ルート直下へ集約します。
+ネオジオポケット／カラーの既定PCフォルダーは共通の `work/Roms/NGPC/` です。`FDS` と `SG1000` は従来のフォルダー名を維持します。保存済みのPCフォルダー指定は、既定名の変更後も保持します。
+FDSは[NESコア](https://github.com/MiSTer-devel/NES_MiSTer)、SG-1000は[SMSコア](https://github.com/MiSTer-devel/SMS_MiSTer)などで対応しています。実機に専用フォルダーがなくても未対応という意味ではありません。コアの標準案内ではそれぞれ `NES`・`SMS` にROMを置きますが、このツールは[Console Modeの配布設定](https://github.com/Retro-Remake/ConsoleMode_Distribution/blob/main/section_groups/Console.ini)に合わせ、`FDS`・`SG1000` をPCの既定フォルダー名と実機への転送先に使います。FDSの起動には別途BIOSの設定が必要です。
 同じファイル名が複数あれば最初の1本を登録します。既存ROMは同名でスキップします。
 子フォルダーを含む実機一覧はCLIのscanで取得できますが、その子フォルダーへの転送は対応しません。
 

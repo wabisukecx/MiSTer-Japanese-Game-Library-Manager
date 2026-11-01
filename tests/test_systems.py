@@ -23,6 +23,19 @@ from test_artwork_transfer import FTP, PNG
 
 
 class SystemsTests(unittest.TestCase):
+    def test_default_pc_rom_folder_names_match_mister(self):
+        expected = {
+            'MD': 'MegaDrive', 'GB': 'GAMEBOY', 'PCE': 'TGFX16',
+            'PCECD': 'TGFX16-CD', 'PS1': 'PSX', 'SATURN': 'Saturn',
+            'WS': 'WonderSwan', 'WSC': 'WonderSwanColor', 'GG': 'GameGear',
+            'MCD': 'MegaCD', 'NGP': 'NGPC', 'NGPC': 'NGPC', 'VB': 'VirtualBoy',
+        }
+        for system, folder in expected.items():
+            with self.subTest(system=system):
+                self.assertEqual(system_profile(system).rom_folder_name, folder)
+        self.assertEqual(system_profile('FDS').rom_folder_name, 'FDS')
+        self.assertEqual(system_profile('SG1000').rom_folder_name, 'SG1000')
+
     def test_megadrive_roots_extensions_and_provider_catalog(self):
         profile = system_profile('MD')
         self.assertEqual(profile.screenscraper_id, 1)

@@ -27,7 +27,8 @@ class MainWindow(TransferMixin, ImportMixin, DetailMixin, QMainWindow):
     def __init__(self, db_path):
         super().__init__()
         self.db_path = str(Path(db_path).resolve())
-        self.rom_folders = {system: ROM_ROOT / system for system in SYSTEMS}
+        self.rom_folders = {system: ROM_ROOT / profile.rom_folder_name
+                            for system, profile in SYSTEMS.items()}
         for folder in self.rom_folders.values():
             folder.mkdir(parents=True, exist_ok=True)
         self.task = None

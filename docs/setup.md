@@ -74,7 +74,7 @@ IPはConsole Modeの「Home → Settings → Sound & Connectivity → Network」
 
 ## 5. ROMと画像取得先を設定する
 
-1. PCのROMフォルダーを機種ごとに用意します。標準はプロジェクト内の `work/Roms/<機種ID>/` です。[対応機種とROM形式](systems.md)を確認してください。
+1. PCのROMフォルダーを機種ごとに用意します。標準はプロジェクト内の `work/Roms/<MiSTerのフォルダー名>/`（例: `MegaDrive`、`GAMEBOY`、`PSX`）です。[対応機種とROM形式](systems.md)を確認してください。
 2. Skraperで対象機種を追加し、Games & Front-End → Games/Roms folderにそのROMフォルダーを指定します。
 3. Mediaで画像取得対象をIMAGE / BOX 2D（パッケージ正面）にし、PNG形式のOutput folderを指定します。標準の画像出力先はROMフォルダー内の `media/box2dfront/` です。日本版だけを取得する場合は地域をJPのみとし、ROM地域優先をOFFにします。
 4. 少数のROMで取得を試し、ROMと同じ基本名のPNGが出力されることを確認します。

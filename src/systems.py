@@ -20,6 +20,11 @@ class System:
     max_zip_rom_bytes: int = 64 * 1024 * 1024
 
     @property
+    def rom_folder_name(self):
+        """Use the primary MiSTer directory name for the default PC ROM folder."""
+        return PurePosixPath(self.root).name
+
+    @property
     def roots(self):
         return (self.root, *self.alternate_roots)
 
