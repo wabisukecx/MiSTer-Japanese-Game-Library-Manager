@@ -149,12 +149,12 @@ class JapanesePlatformTests(unittest.TestCase):
                 result = register_folder(db, color, 'NGPC', '/media/fat/games/NGPC', root, lookup=False)
                 self.assertEqual(result['count'], 2)
                 self.assertEqual(db.setting('workflow/NGP'), mono_profile)
-                self.assertEqual(db.setting('workflow/NGPC')['rom_folder'], str(color))
-                self.assertEqual(db.setting('workflow/NGPC')['image_folder'], str(color / 'media' / 'box2dfront'))
+                self.assertEqual(db.setting('workflow/NGPC')['rom_folder'], str(color.resolve()))
+                self.assertEqual(db.setting('workflow/NGPC')['image_folder'], str((color / 'media' / 'box2dfront').resolve()))
                 self.assertEqual({g['rom_filename']: g['system'] for g in db.games()},
                                  {'Mono.ngp': 'NGP', 'Color.ngc': 'NGPC', 'Other.npc': 'NGPC'})
                 self.assertTrue(all(g['rom_path'].startswith('/media/fat/games/NGPC/') for g in db.games()))
                 register_folder(db, mono, 'NGP', '/media/fat/games/NGPC', root, lookup=False)
-                self.assertEqual(db.setting('workflow/NGPC')['rom_folder'], str(color))
+                self.assertEqual(db.setting('workflow/NGPC')['rom_folder'], str(color.resolve()))
             finally:
                 db.close()

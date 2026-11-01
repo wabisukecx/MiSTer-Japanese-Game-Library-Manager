@@ -23,7 +23,7 @@ class ArtworkCleanupTests(unittest.TestCase):
                 db.select_artwork(game, edit_id)
                 original.unlink()
                 self.assertEqual(db.prune_missing_artworks(), dict(removed=1, cleared=0))
-                self.assertEqual(db.game(game)['artwork_path'], str(edited))
+                self.assertEqual(db.game(game)['artwork_path'], str(edited.resolve()))
                 self.assertEqual([a['id'] for a in db.artworks(game)], [edit_id])
                 self.assertEqual(db.db.execute('PRAGMA foreign_key_check').fetchall(), [])
                 edited.unlink()

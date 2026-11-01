@@ -47,7 +47,7 @@ class GUITests(unittest.TestCase):
                 self.assertEqual(window.model.rowCount(), 1)
                 game = window.model.games[0]
                 self.assertEqual(game['id'], ident)
-                self.assertEqual(game['local_rom_path'], str(replacement))
+                self.assertEqual(game['local_rom_path'], str(replacement.resolve()))
                 self.assertEqual(game['japanese_title'], '確定名')
                 self.assertEqual(game['artwork_path'], str(image))
                 window.model.set_checks([ident], True)
@@ -355,10 +355,10 @@ class GUITests(unittest.TestCase):
             try:
                 with patch('gui.skraper_dialog.QProcess.startDetached', return_value=(True, 123)) as start:
                     dialog.launch()
-                    self.assertEqual(start.call_args.args, (str(executable), [], str(root)))
-                self.assertEqual(dialog.validated_profile()['image_folder'], str(root / 'output'))
+                    self.assertEqual(start.call_args.args, (str(executable.resolve()), [], str(root.resolve())))
+                self.assertEqual(dialog.validated_profile()['image_folder'], str((root / 'output').resolve()))
                 dialog.output.setText(str(roms))
-                self.assertEqual(dialog.validated_profile()['image_folder'], str(roms))
+                self.assertEqual(dialog.validated_profile()['image_folder'], str(roms.resolve()))
             finally:
                 dialog.close()
 
@@ -387,7 +387,7 @@ class GUITests(unittest.TestCase):
                         window, 'open_import_dialog'):
                     window.choose_skraper()
                     self.wait_idle(window)
-                self.assertEqual(plan.call_args.args[0], profile['image_folder'])
+                self.assertEqual(plan.call_args.args[0], str(Path(profile['image_folder']).resolve()))
                 self.assertEqual([g['id'] for g in plan.call_args.args[1]], [game_id])
             finally:
                 window.close()
@@ -463,7 +463,7 @@ class GUITests(unittest.TestCase):
                 db = Store(path)
                 try:
                     self.assertEqual(len(db.games()), 1)
-                    self.assertEqual(db.setting('workflow/NES')['rom_folder'], str(root))
+                    self.assertEqual(db.setting('workflow/NES')['rom_folder'], str(root.resolve()))
                 finally:
                     db.close()
             finally:
@@ -524,8 +524,8 @@ class GUITests(unittest.TestCase):
                     games = db.games()
                     self.assertEqual(len(games), 1)
                     self.assertEqual(games[0]['rom_path'], '/media/fat/games/SNES/Game.sfc')
-                    self.assertEqual(games[0]['local_rom_path'], str(root / 'Game.sfc'))
-                    self.assertEqual(db.setting('workflow/SNES')['rom_folder'], str(root))
+                    self.assertEqual(games[0]['local_rom_path'], str((root / 'Game.sfc').resolve()))
+                    self.assertEqual(db.setting('workflow/SNES')['rom_folder'], str(root.resolve()))
                 finally:
                     db.close()
                 def accept(dialog):
@@ -1027,7 +1027,7 @@ class GUITests(unittest.TestCase):
             try:
                 self.wait_idle(window)
                 self.assertFalse(window.recovery_button.isHidden())
-                self.assertEqual(window.recovery_reports, [str(report)])
+                self.assertEqual(window.recovery_reports, [str(report.resolve())])
                 def accept(dialog):
                     self.assertIn('/media/fat/games/NES/Game.nes', dialog.findChild(QPlainTextEdit).toPlainText())
                     fields = dialog.findChildren(QLineEdit)

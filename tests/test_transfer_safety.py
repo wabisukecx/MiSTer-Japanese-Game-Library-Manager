@@ -225,7 +225,7 @@ class SafetyTests(unittest.TestCase):
             (folder / name).write_bytes(b'rom')
         result = register_folder(self.db, folder, 'NES', '/media/fat/games/NES', self.root, lookup=False)
         self.assertEqual((result['count'], result['duplicates']), (1, ['GAME.NES']))
-        self.assertEqual(self.db.setting('workflow/NES')['rom_folder'], str(folder))
+        self.assertEqual(self.db.setting('workflow/NES')['rom_folder'], str(folder.resolve()))
 
     def test_batch_plan_uses_live_db_selection(self):
         old_view = self.db.games()
