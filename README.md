@@ -2,6 +2,8 @@
 
 MiSTer Console Modeの日本語ゲーム名とパッケージ画像をPCで整備し、まとめて反映するツールです。PyQt6のGUIと、登録・照合・確認用のCLIを備えています。
 
+本ツールは個人が公開する非公式のツールです。MiSTerプロジェクト、Console Mode、Skraper、ScreenScraper、各データベースの提供元とは関係ありません。ROM本体は含まず、取得する機能もありません。
+
 標準の使い方では、**MiSTerにConsole Modeを導入し、PCにSkraperを用意して、SkraperからScreenScraperのユーザーアカウントでログインしておく**ことを前提にします。本ツールをインストールする前に、下の「使い始める前の準備」を進めてください。
 
 ## 主な機能
@@ -95,6 +97,20 @@ Skraperでのログイン・取得設定・取得開始はSkraper側で行いま
 
 [ドキュメント一覧](docs/README.md)
 
+## サポート方針
+
+個人で公開している非公式ツールで、個別のサポートは行いません。変更が必要な場合は、フォークしてご利用ください。MiSTerのSDカードを操作するため、転送の前に、大切なデータのバックアップを取ってください。FTPは暗号化されません。信頼できるネットワークでのみ使用してください。
+
+## 公開前のチェック
+
+リポジトリを公開・更新する前に、次の点を確認します。
+
+- `git ls-files` の一覧に、ROM、取得画像、SQLite、認証情報が含まれていない
+- `work/`、`.venv/`、`build/` が `.gitignore` で除外されている
+- ドキュメントの接続例が、例示用のIP(`192.0.2.10`)になっている
+- 第三者のデータの出典とライセンスの表記(NOTICE)が、取得データと一緒に保存される
+- コミットの作者メールアドレスを、公開してよいか確認した
+
 ## ライセンス
 
-本ツールのソースコードは [MIT License](LICENSE) で公開します。Retronian GameDBのデータ（CC BY-SA 4.0）、GameDataBase by PigSaint（CC BY 4.0）、Redump由来のデータ、Skraper、ScreenScraper、画像、ROMは本リポジトリに含まれず、それぞれの提供元の条件に従います。
+本ツールのソースコードは [GNU GPL v3.0 only](LICENSE) で公開します。GUIが利用するPyQt6が、GPLv3または商用ライセンスのデュアルライセンスであるため、これに合わせています。Retronian GameDBのデータ（CC BY-SA 4.0）、GameDataBase by PigSaint（CC BY 4.0）、Redump由来のデータ、Skraper、ScreenScraper、画像、ROMは本リポジトリに含まれず、それぞれの提供元の条件に従います。

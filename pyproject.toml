@@ -7,7 +7,7 @@ name = "mister-jp-library"
 version = "0.1.0"
 description = "Manage Japanese game titles and artwork on PC and transfer them to MiSTer Console Mode"
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "wabisukecx" }]
 requires-python = ">=3.10"

@@ -38,7 +38,7 @@ License: CC BY 4.0, https://creativecommons.org/licenses/by/4.0/
 Changes: extracted Japanese-region titles, selected Japanese cover/screen text,
 and converted CSV records to this tool's JSON matching format.
 Retain attribution, the license link and this change notice when redistributing.
-These downloaded records are separate from this tool's MIT-licensed source.
+These downloaded records are separate from this tool's source code.
 '''
 
 

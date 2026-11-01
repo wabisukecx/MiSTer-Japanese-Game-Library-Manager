@@ -28,7 +28,7 @@ Export: https://github.com/yingw/redump-local-names
 Original source of this export: http://redump.org/
 Current Redump metadata declaration: https://redump.info/about (public domain).
 This declaration concerns metadata, not box art, game files or website source code.
-Downloaded data is not part of this tool's MIT-licensed source or the Retronian catalog.
+Downloaded data is not part of this tool's source code or the Retronian catalog.
 '''
 
 
