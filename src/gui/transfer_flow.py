@@ -36,7 +36,7 @@ class TransferMixin:
             return
         dialog = TransferDialog(items, titles, self, roms=roms, db_path=self.db_path, review_rows=plan['review_rows'])
         profile = system_profile(targets[0]['system'])
-        dialog.setWindowTitle(profile.name + ' · ROM・画像・日本語名を転送' + ('（実機未検証）' if not profile.verified else ''))
+        dialog.setWindowTitle(profile.name + ' · ROM・画像・日本語名を転送')
         if dialog.exec() != QDialog.DialogCode.Accepted:
             dialog.password.clear()
             return

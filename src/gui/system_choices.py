@@ -17,7 +17,7 @@ SYSTEM_GROUPS = (
 )
 
 
-def populate_systems(combo, *, include_all=False, show_unverified=False):
+def populate_systems(combo, *, include_all=False):
     previous = combo.currentData()
     blocked = combo.blockSignals(True)
     try:
@@ -36,8 +36,7 @@ def populate_systems(combo, *, include_all=False, show_unverified=False):
                 profile = SYSTEMS[identifier]
                 if first_system is None:
                     first_system = combo.count()
-                suffix = '（実機未検証）' if show_unverified and not profile.verified else ''
-                combo.addItem(profile.name + suffix, profile.id)
+                combo.addItem(profile.name, profile.id)
         selected = combo.findData(previous) if previous is not None else -1
         combo.setCurrentIndex(selected if selected >= 0 else 0 if include_all else first_system)
         combo.setMaxVisibleItems(20)

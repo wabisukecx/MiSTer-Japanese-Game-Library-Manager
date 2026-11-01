@@ -85,7 +85,7 @@ class MainWindow(TransferMixin, ImportMixin, DetailMixin, QMainWindow):
         self.pending_only.toggled.connect(self.refilter)
         filters.addWidget(self.search)
         self.system = QComboBox()
-        populate_systems(self.system, include_all=True, show_unverified=True)
+        populate_systems(self.system, include_all=True)
         self.system.currentIndexChanged.connect(self.refilter)
         filters.addWidget(self.system)
         filters.addWidget(self.pending_only)
